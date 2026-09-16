@@ -17,6 +17,14 @@ const PROFILE_KEY = 'htd_profile_v1';
 const SCORES_KEY = 'htd_scores_v1';
 const TOURNAMENTS_KEY = 'htd_tournaments_v1';
 const TOURNAMENT_SCORES_KEY = 'htd_tournament_scores_v1';
+const LIVE_RUNS_KEY = 'htd_live_runs_v1';
+
+/**
+ * A run that stops sending heartbeats — a closed tab, a reloaded page — drops
+ * off the lobby after this. Long enough to survive a slow node, short enough
+ * that the lobby does not fill with ghosts.
+ */
+const LIVE_TTL_MS = 120000;
 
 /** Boards are trimmed to this, best first, so storage cannot grow forever. */
 const MAX_BOARD_SIZE = 100;
@@ -72,6 +80,37 @@ export const localStore = {
     const board = withoutDuplicate(readJSON(SCORES_KEY, []), entry.id);
     writeJSON(SCORES_KEY, sortedBoard([...board, entry]));
     return entry;
+  },
+
+  // ---- Runs in progress, for the tournament lobby --------------------------
+
+  /** Live runs for a tournament, freshest scores first, ghosts dropped. */
+  async listLiveRuns(tournamentId) {
+    const cutoff = Date.now() - LIVE_TTL_MS;
+    return Object.values(readJSON(LIVE_RUNS_KEY, {}))
+      .filter(entry => entry.tournament === tournamentId && entry.updatedAt > cutoff)
+      .sort(compareEntries);
+  },
+
+  /** Announce or update a run in progress. */
+  async setLiveRun(entry) {
+    const live = readJSON(LIVE_RUNS_KEY, {});
+    live[entry.id] = { ...entry, updatedAt: Date.now() };
+
+    // Opportunistic sweep, so abandoned entries cannot pile up forever.
+    const cutoff = Date.now() - LIVE_TTL_MS;
+    for (const [id, row] of Object.entries(live)) {
+      if (row.updatedAt <= cutoff) delete live[id];
+    }
+    writeJSON(LIVE_RUNS_KEY, live);
+    return entry;
+  },
+
+  /** Take a run out of the lobby: it finished, or it went away. */
+  async clearLiveRun(id) {
+    const live = readJSON(LIVE_RUNS_KEY, {});
+    delete live[id];
+    writeJSON(LIVE_RUNS_KEY, live);
   },
 
   async listTournaments() {

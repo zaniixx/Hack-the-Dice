@@ -8,12 +8,14 @@
 import { cycleSpeed, toggleMuted } from '../core/settings.js';
 import { initAudio, setMuted } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
+import { toast } from './fx.js';
 import { dieAt } from '../engine/dice-board.js';
 import { screenToBoard, setBoardCursor } from '../render/board-view.js';
 import { ItemKind } from '../data/catalog.js';
 import { run, Phase } from '../game/state.js';
 import { els } from './dom.js';
 import { isModalOpen, hideModal } from './modal.js';
+import { isStartScreenOpen } from './start-screen.js';
 import { syncSettingsButtons } from './hud.js';
 
 /** Clicking the board rolls, or locks the die under the pointer. */
@@ -55,6 +57,16 @@ function bindButtons(actions) {
     actions.nextNode();
   };
 
+  els.seed.onclick = async () => {
+    if (!run || !run.seed) return;
+    try {
+      await navigator.clipboard.writeText(run.seed);
+      toast('SEED COPIED: ' + run.seed);
+    } catch {
+      toast('SEED: ' + run.seed);
+    }
+  };
+
   els.speedButton.onclick = () => {
     cycleSpeed();
     syncSettingsButtons();
@@ -88,6 +100,8 @@ function bindToolkit(actions) {
 
 function bindKeyboard(actions) {
   addEventListener('keydown', event => {
+    // The start screen has its own keys, and text fields to type into.
+    if (isStartScreenOpen()) return;
     if (isModalOpen()) {
       // The title and the run-over screen have no "back" to escape to.
       const dismissible = run.phase !== Phase.TITLE && run.phase !== Phase.OVER;

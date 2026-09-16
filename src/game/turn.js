@@ -5,7 +5,7 @@
  * game/execute.js takes over.
  */
 import { ABILITIES } from '../data/abilities.js';
-import { pick } from '../core/random.js';
+import { gamePick } from '../core/game-random.js';
 import { rerollsPerRoll } from './difficulty.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
@@ -63,7 +63,7 @@ export function onDiceSettled() {
   run.phase = Phase.MANIP;
 
   if (run.enemy.boss === 'antivirus' && dice.length) {
-    const victim = pick(dice);
+    const victim = gamePick(dice);
     victim.quarantined = true;
     log(`> antivirus quarantined a die showing ${victim.value}`, 'red');
     sfx.buzz();

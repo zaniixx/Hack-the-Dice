@@ -12,6 +12,7 @@
  */
 import { DICE } from '../data/dice.js';
 import { rand, randInt } from '../core/random.js';
+import { gameInt } from '../core/game-random.js';
 import { clamp } from '../core/math.js';
 import { sfx } from '../audio/sfx.js';
 
@@ -56,7 +57,7 @@ let timeSinceThrow = 0;
  */
 function createDie(type) {
   const faces = DICE[type].faces;
-  const value = faces === 6 ? randInt(1, 6) : faces;
+  const value = faces === 6 ? gameInt(1, 6) : faces;
   return {
     type,
     x: 0, y: 0, z: 0,
@@ -107,7 +108,9 @@ export function layoutTray() {
  */
 export function throwDice(list, { fullThrow }) {
   for (const die of list) {
-    die.value = randInt(1, DICE[die.type].faces);
+    // The face is seeded; everything below it — the arc, the spin, the
+    // tumbling faces on the way down — is cosmetic and stays unseeded.
+    die.value = gameInt(1, DICE[die.type].faces);
     die.settled = false;
     die.flickerTimer = 0;
     die.quarantined = false;

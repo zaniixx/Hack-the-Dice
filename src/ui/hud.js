@@ -149,6 +149,7 @@ function renderTopBar() {
   els.tournamentWrap.hidden = !run.tournament;
   if (run.tournament) els.tournament.textContent = run.tournament.name;
 
+  els.seed.textContent = run.seed || '—';
   els.server.textContent = run.server;
   els.corp.textContent = corpName(run.server);
   els.node.textContent = `${Math.min(run.node, NODES_PER_SERVER)}/${NODES_PER_SERVER}`;

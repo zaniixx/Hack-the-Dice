@@ -17,6 +17,14 @@ button {
   font:inherit;
   color:inherit;
 }
+
+/*
+ * The hidden attribute has to beat any display rule an element also carries.
+ * The start overlay is display:flex and the top-bar stats are display:flex, so
+ * without this both stay on screen when hidden — and a screen you cannot see
+ * past makes every button under it look dead.
+ */
+[hidden] { display: none !important; }
 .px { font-family:var(--px); }
 #app {
   display:flex;

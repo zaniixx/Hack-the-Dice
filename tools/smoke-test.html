@@ -18,7 +18,8 @@
 /*
  * Loads every module that does not need the game's markup and checks the rules
  * they encode. Open it through a static server; a green list means the module
- * graph is sound and the maths still says what it said.
+ * graph is sound and the maths still says what it said. Append ?ping to mirror
+ * the result to the server log for headless runs.
  */
 import { fmt, fmtM } from '../src/core/format.js';
 import { clamp } from '../src/core/math.js';
@@ -31,6 +32,15 @@ import { applyScoringValues, comboTags, isAbsorbed } from '../src/game/scoring.j
 import { dieSprite, dieIconURL } from '../src/render/die-sprites.js';
 import { iconURL } from '../src/render/icon-sprites.js';
 import * as board from '../src/engine/dice-board.js';
+import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, difficultySummary } from '../src/data/difficulty.js';
+import { runScore } from '../src/game/score.js';
+import {
+  createTournament, decodeTournament, encodeResult, decodeResult, isOpCode,
+} from '../src/game/tournament.js';
+import {
+  seedRun, restoreRng, rngState, gameInt, normaliseSeed, randomSeed,
+} from '../src/core/game-random.js';
+import { compareEntries } from '../src/services/store.js';
 
 const out = document.getElementById('out');
 let failures = 0;
@@ -124,8 +134,79 @@ try {
     board.dice.every(d => d.shownValue === d.value && d.value >= 1), true);
   check('roll clock resets on throw', board.secondsSinceThrow() > 0, true);
 
-  out.insertAdjacentHTML('beforeend',
-    `<h1 class="${failures ? 'fail' : 'pass'}">${failures ? failures + ' FAILURE(S)' : 'ALL CHECKS PASSED'}</h1>`);
+  // Threat levels ramp in one direction, and describe themselves honestly.
+  check('tiers are in ramp order', DIFFICULTY_ORDER,
+    ['script-kiddie', 'pen-tester', 'black-hat', 'nation-state']);
+  check('firewalls get harder',
+    DIFFICULTY_ORDER.map(id => DIFFICULTIES[id].firewallScale), [0.75, 1, 1.5, 2.2]);
+  check('unknown tier falls back', difficultyOf('nope').name, 'PEN TESTER');
+  check('tier describes itself', difficultySummary('nation-state').includes('3 executes'), true);
+
+  // Scoring.
+  const finishedRun = {
+    difficulty: 'black-hat', server: 3,
+    stats: { nodes: 7, scrap: 120, biggest: 5000, dmg: 90000 },
+  };
+  check('run score', runScore(finishedRun), (7 * 500 + 2 * 2500 + 120 * 10) * 2);
+  check('board sorts by score then depth', [
+    { score: 10, server: 1, node: 1, biggest: 0 },
+    { score: 99, server: 1, node: 1, biggest: 0 },
+    { score: 99, server: 4, node: 1, biggest: 0 },
+  ].sort(compareEntries).map(e => e.score + '/' + e.server), ['99/4', '99/1', '10/1']);
+
+  // Seeded runs: the same seed has to roll the same dice.
+  seedRun('ABC123');
+  const firstRolls = Array.from({ length: 8 }, () => gameInt(1, 6));
+  seedRun('ABC123');
+  check('the same seed rolls the same dice',
+    Array.from({ length: 8 }, () => gameInt(1, 6)), firstRolls);
+  seedRun('DIFFERENT');
+  check('a different seed diverges',
+    Array.from({ length: 8 }, () => gameInt(1, 6)).join() !== firstRolls.join(), true);
+  check('seeds are normalised', normaliseSeed('  my seed! '), 'MY-SEED');
+  check('a blank seed gets a random one', seedRun('').length, 6);
+  check('generated seeds are readable', /^[0-9A-HJKMNP-TV-Z]+$/.test(randomSeed()), true);
+
+  // Saving mid-run stores where the stream got to, not just the seed.
+  seedRun('STATE');
+  gameInt(1, 6);
+  const midStream = rngState();
+  const nextValue = gameInt(1, 1000);
+  restoreRng('STATE', midStream);
+  check('a resumed run continues the stream', gameInt(1, 1000), nextValue);
+
+  // Tournament codes carry the whole rule set between devices.
+  const tournament = createTournament({
+    name: 'night market', host: 'trinity', difficulty: 'black-hat', seed: 'RACE1',
+    bans: { bosses: ['watchdog'], dice: ['d6'], artifacts: [], abilities: ['clone'] },
+  });
+  const rejoined = decodeTournament(tournament.code);
+  check('op code is five characters', tournament.id.length, 5);
+  check('op code avoids lookalike letters', /^[0-9A-HJKMNP-TV-Z]{5}$/.test(tournament.id), true);
+  check('code keeps the id', rejoined.id, tournament.id);
+  check('code upper-cases the name', rejoined.name, 'NIGHT MARKET');
+  check('code keeps the fixed seed', rejoined.seed, 'RACE1');
+  check('code keeps every ban', rejoined.bans,
+    { bosses: ['watchdog'], dice: ['d6'], artifacts: [], abilities: ['clone'] });
+  check('code stays short enough for a small QR', tournament.code.length <= 60, true);
+  check('code uses only QR alphanumeric characters',
+    /^[0-9A-Z $%*+\-.\/:]+$/.test(tournament.code), true);
+  check('a truncated code is refused', decodeTournament(tournament.code.slice(0, 10)), null);
+  check('a scanned join link decodes',
+    decodeTournament('http://10.0.0.5:8000/#join=' + tournament.code).id, tournament.id);
+  check('an op code is told apart from an invite code',
+    [isOpCode(tournament.id), isOpCode(tournament.code)], [true, false]);
+  check('a result code round trips',
+    decodeResult(encodeResult({ id: 'x1', handle: 'NEO', score: 4200 })).score, 4200);
+  check('a tournament code is not a result code', decodeResult(tournament.code), null);
+
+  const summary = failures ? `${failures} FAILURE(S)` : 'ALL CHECKS PASSED';
+  out.insertAdjacentHTML('beforeend', `<h1 class="${failures ? 'fail' : 'pass'}">${summary}</h1>`);
+
+  // Append ?ping to mirror the result to the server log, for headless runs.
+  if (location.search.includes('ping')) {
+    await fetch('/__t/' + encodeURIComponent(summary)).catch(() => {});
+  }
 } catch (error) {
   out.insertAdjacentHTML('beforeend',
     `<div class="fail">LOAD ERROR: ${(error && error.stack) || error}</div>`);

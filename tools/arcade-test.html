@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hack the Dice — arcade test</title>
+<style>
+  body { background:#0b0a14; color:#dfe6ff; font:13px/1.5 ui-monospace, monospace; margin:0; }
+  #report { position:fixed; inset:0 0 auto 0; z-index:999; background:#08070fee; padding:10px 14px;
+            max-height:100vh; overflow:auto; border-bottom:2px solid #241e42; }
+  #report h1 { font-size:14px; color:#3df2ff; margin:0 0 8px; }
+  #report h2 { font-size:12px; color:#9a7bff; margin:10px 0 2px; }
+  .pass { color:#b6ff3d; }
+  .fail { color:#ff4d6d; font-weight:bold; }
+  .total { font-size:14px; margin-top:10px; }
+</style>
+</head>
+<body>
+<div id="report"><h1>Hack the Dice — arcade test</h1><div id="lines">running...</div></div>
+
+<script type="module">
+/*
+ * End-to-end test for the start screen, threat levels, leaderboards and
+ * tournaments. It loads the real markup from index.html, boots the real game,
+ * and clicks through the screens the way a player would.
+ *
+ * Open it through a static server (see the README). Append ?ping to mirror each
+ * result to the server log, which is how it is run headlessly.
+ *
+ * The player's saved run, boards and tournaments are stashed and restored.
+ */
+const report = document.getElementById('lines');
+const ping = location.search.includes('ping');
+const sent = [];
+let failures = 0;
+
+function say(html, cls = '') {
+  report.insertAdjacentHTML('beforeend', `<div class="${cls}">${html}</div>`);
+  if (ping) sent.push(fetch('/__t/' + encodeURIComponent(html.replace(/<[^>]+>/g, ''))).catch(() => {}));
+}
+const section = title => report.insertAdjacentHTML('beforeend', `<h2>${title}</h2>`);
+function check(name, actual, expected) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (!ok) failures++;
+  say(`${ok ? 'PASS' : 'FAIL'} ${name}` +
+    (ok ? '' : ` — got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`),
+    ok ? 'pass' : 'fail');
+}
+window.onerror = (message, file, lineNo) => { failures++; say(`ERROR ${message} @${lineNo}`, 'fail'); };
+addEventListener('unhandledrejection', event => {
+  failures++;
+  say(`REJECTION ${(event.reason && event.reason.stack) || event.reason}`, 'fail');
+});
+
+const savedStorage = { ...localStorage };
+const restoreStorage = () => {
+  localStorage.clear();
+  for (const [key, value] of Object.entries(savedStorage)) localStorage.setItem(key, value);
+};
+// Start from empty boards so ranks and counts are predictable.
+for (const key of ['htd_scores_v1', 'htd_tournaments_v1', 'htd_tournament_scores_v1', 'htd_profile_v1']) {
+  localStorage.removeItem(key);
+}
+
+// Boot the real page: its markup, its stylesheets, its entry point.
+const page = await (await fetch('../index.html')).text();
+document.head.insertAdjacentHTML('beforeend',
+  [...page.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)]
+    .map(m => `<link rel="stylesheet" href="../${m[1]}">`).join(''));
+document.body.insertAdjacentHTML('beforeend', page.split('<body>')[1].split('<script')[0]);
+
+await import('../src/main.js');
+
+// Namespace imports where the module reassigns its exports (`run`, `dice`).
+const state = await import('../src/game/state.js');
+const board = await import('../src/engine/dice-board.js');
+const session = await import('../src/game/session.js');
+const { settings } = await import('../src/core/settings.js');
+const { rollDice, onDiceSettled } = await import('../src/game/turn.js');
+const { generateShop } = await import('../src/game/shop.js');
+const { executePayload } = await import('../src/game/execute.js');
+const { decodeTournament, decodeResult, encodeResult, isAllowed } = await import('../src/game/tournament.js');
+const { publish: publishLiveRun } = await import('../src/game/live-run.js');
+const { mergeBoard } = await import('../src/ui/live-board.js');
+const { runScore } = await import('../src/game/score.js');
+const { store } = await import('../src/services/store.js');
+const { els } = await import('../src/ui/dom.js');
+
+/** Screen actions are async; give each click a frame to settle. */
+const tick = () => new Promise(resolve => setTimeout(resolve, 60));
+/** Click something on the start screen, waiting for the view to render it. */
+const click = async (selector, attempts = 25) => {
+  for (let i = 0; i < attempts; i++) {
+    const el = els.start.querySelector(selector);
+    if (el) { el.click(); await tick(); return; }
+    await tick();
+  }
+  throw new Error('no element matching ' + selector);
+};
+const settle = () => { board.forceSettleAll(); onDiceSettled(); };
+
+try {
+  report.innerHTML = '';
+  settings.speed = 4;
+  await tick();
+
+  section('Start screen');
+  check('start screen is up', els.start.hidden, false);
+  check('four threat levels offered', els.start.querySelectorAll('.tier-card').length, 4);
+  check('pen tester is the default',
+    els.start.querySelector('.tier-card.on .tier-name').textContent, 'PEN TESTER');
+
+  els.start.querySelector('#handleInput').value = 'NEO';
+  await click('[data-action="difficulty:nation-state"]');
+  await tick();
+  check('tier selection sticks',
+    els.start.querySelector('.tier-card.on .tier-name').textContent, 'NATION STATE');
+  check('handle survives the re-render', els.start.querySelector('#handleInput').value, 'NEO');
+
+  section('Threat level applies to the run');
+  await click('[data-action="start"]');
+  await tick();
+  check('run started', state.run.phase, 'ready');
+  check('start screen closed', els.start.hidden, true);
+  // Not just the attribute: a display rule can out-rank it and leave the
+  // overlay on screen, which makes every button under it look dead.
+  check('start overlay is really gone', getComputedStyle(els.start).display, 'none');
+  check('nothing is left covering the board', els.start.getBoundingClientRect().height, 0);
+  check('everything marked hidden is hidden',
+    [...document.querySelectorAll('[hidden]')].every(el => getComputedStyle(el).display === 'none'),
+    true);
+  check('handle recorded', state.run.handle, 'NEO');
+  check('threat level recorded', state.run.difficulty, 'nation-state');
+  check('tier sets executes', state.run.executes, 3);
+  check('tier scales the firewall', state.run.enemy.max, Math.round(40 * 2.2));
+  check('runner shown in the top bar', els.handle.textContent, 'NEO');
+  check('tournament stat is hidden outside one',
+    getComputedStyle(els.tournamentWrap).display, 'none');
+  check('tier shown in the top bar', els.tier.textContent, 'NATION STATE');
+
+  rollDice();
+  settle();
+  check('tier sets rerolls', state.run.rerolls, 1);
+
+  section('Score and leaderboard');
+  state.run.stats.nodes = 3;
+  state.run.stats.scrap = 20;
+  state.run.server = 2;
+  const expected = Math.round((3 * 500 + 2500 + 20 * 10) * 3.5);
+  check('score formula', runScore(state.run), expected);
+
+  await session.abandonRun();
+  await tick();
+  check('abandoning returns to the start screen', els.start.hidden, false);
+
+  const scores = await store.listScores({});
+  check('score was banked', scores.length, 1);
+  check('banked under the handle', scores[0].handle, 'NEO');
+  check('banked the right score', scores[0].score, expected);
+
+  await click('[data-action="view:leaderboard"]');
+  await tick();
+  check('board lists the run', els.start.querySelector('.board .who').textContent, 'NEO');
+  await click('[data-action="board:script-kiddie"]');
+  await tick();
+  check('filtering by tier hides it', els.start.querySelectorAll('.board .who').length, 0);
+
+  section('Seeded runs');
+  await click('[data-action="view:home"]');
+  await tick();
+  els.start.querySelector('#handleInput').value = 'SEEDER';
+  els.start.querySelector('#seedInput').value = 'race-1';
+  await click('[data-action="difficulty:pen-tester"]');
+  await tick();
+  check('the seed survives the re-render', els.start.querySelector('#seedInput').value, 'RACE-1');
+  await click('[data-action="start"]');
+  await tick();
+
+  check('the run took the seed', state.run.seed, 'RACE-1');
+  check('the seed is shown in the game window', els.seed.textContent, 'RACE-1');
+  rollDice();
+  settle();
+  const firstHand = board.dice.map(die => die.value);
+  const firstTarget = state.run.enemy.name;
+
+  // The same seed again has to produce the same node and the same dice.
+  session.startNewRun({ handle: 'SEEDER', difficulty: 'pen-tester', seed: 'RACE-1' });
+  rollDice();
+  settle();
+  check('the same seed rolls the same hand', board.dice.map(die => die.value), firstHand);
+  check('the same seed meets the same target', state.run.enemy.name, firstTarget);
+
+  // A different seed should not.
+  session.startNewRun({ handle: 'SEEDER', difficulty: 'pen-tester', seed: 'RACE-2' });
+  rollDice();
+  settle();
+  const otherHand = board.dice.map(die => die.value);
+  check('a different seed rolls differently',
+    otherHand.join() !== firstHand.join() || state.run.enemy.name !== firstTarget, true);
+
+  check('the profile remembers the runner', (await store.getProfile()).handle, 'SEEDER');
+  check('the profile remembers the tier', (await store.getProfile()).difficulty, 'pen-tester');
+
+  // Leaving it blank still produces a seed, and shows it.
+  session.startNewRun({ handle: 'SEEDER', difficulty: 'pen-tester' });
+  check('a blank seed becomes a real one', state.run.seed.length, 6);
+  check('and it is on screen', els.seed.textContent, state.run.seed);
+  await session.abandonRun();
+  await tick();
+
+  section('Hosting a tournament');
+  // Abandoning a run lands back on the home view already.
+  await click('[data-action="view:tournaments"]');
+  await click('[data-action="view:host"]'); await tick();
+
+  els.start.querySelector('#tournamentName').value = 'midnight ledger';
+  await click('[data-action="host-difficulty:script-kiddie"]'); await tick();
+  await click('[data-action="ban:dice:d20"]'); await tick();
+  await click('[data-action="ban:artifacts:quantum"]'); await tick();
+  await click('[data-action="ban:abilities:overdrive"]'); await tick();
+  await click('[data-action="ban:bosses:antivirus"]'); await tick();
+  check('bans are marked in the form', els.start.querySelectorAll('.ban-chip.banned').length, 4);
+  await click('[data-action="host-create"]'); await tick();
+
+  const code = els.start.querySelector('#tournamentCode').value;
+  const decoded = decodeTournament(code);
+  check('code is an invite code', code.startsWith('HTD-'), true);
+  check('op code is five characters', decoded.id.length, 5);
+  check('the op code is shown to read out', els.start.querySelector('.op-code').textContent, decoded.id);
+  check('a QR is offered for scanning', !!els.start.querySelector('svg.qr'), true);
+  check('name survived the form', decoded.name, 'MIDNIGHT LEDGER');
+  check('code carries the tier', decoded.difficulty, 'script-kiddie');
+  check('code carries the bans', decoded.bans,
+    { bosses: ['antivirus'], dice: ['d20'], artifacts: ['quantum'], abilities: ['overdrive'] });
+  check('nonsense codes are refused', decodeTournament('HTD1-not-base64!!'), null);
+
+  section('Tournament rules are enforced');
+  await click('[data-action^="play-tournament"]');
+  await tick();
+  check('tournament run started', state.run.tournament.name, 'MIDNIGHT LEDGER');
+  check('tournament sets the tier', state.run.difficulty, 'script-kiddie');
+  check('tournament shown in the top bar', els.tournament.textContent, 'MIDNIGHT LEDGER');
+  check('tournament stat is visible in a tournament',
+    getComputedStyle(els.tournamentWrap).display !== 'none', true);
+  check('banned die is not allowed', isAllowed('die', 'd20'), false);
+  check('other dice still are', isAllowed('die', 'd12'), true);
+
+  state.run.server = 3; // every tier of gear unlocked, so bans have to hold
+  let bannedOffers = 0;
+  for (let visit = 0; visit < 60; visit++) {
+    generateShop();
+    for (const item of state.run.shop) {
+      if (['d20', 'quantum', 'overdrive'].includes(item.id)) bannedOffers++;
+    }
+  }
+  check('banned gear never reaches the market', bannedOffers, 0);
+
+  state.run.server = 1;
+  state.run.node = 5;
+  session.beginNode();
+  check('banned boss is replaced', state.run.enemy.boss, 'encryption');
+
+  section('The lobby, live');
+  const liveNow = await store.listLiveRuns(decoded.id);
+  check('the run shows up in the lobby', liveNow.length, 1);
+  check('it is marked as running', liveNow[0].live, true);
+  // The handle signed in on the start screen carries into tournament runs.
+  check('it is the signed-in runner', liveNow[0].handle, 'SEEDER');
+
+  state.run.stats.nodes = 4;
+  state.run.stats.scrap = 60;
+  publishLiveRun();
+  const climbed = await store.listLiveRuns(decoded.id);
+  check('its provisional score climbs as it goes', climbed[0].score > liveNow[0].score, true);
+
+  const finishedSoFar = await store.listTournamentScores(decoded.id);
+  const merged = mergeBoard(finishedSoFar, climbed);
+  check('live runs rank against finished ones', merged.some(row => row.live), true);
+  check('the board stays sorted by score',
+    merged.every((row, i) => i === 0 || merged[i - 1].score >= row.score), true);
+
+  section('Carrying results between devices');
+  state.run.stats.nodes = 2;
+  await session.abandonRun();
+  await tick();
+  const tournamentBoard = await store.listTournamentScores(decoded.id);
+  check('tournament board recorded the run', tournamentBoard.length, 1);
+  check('the lobby emptied when the run ended', (await store.listLiveRuns(decoded.id)).length, 0);
+  check('result code round trips', decodeResult(encodeResult(tournamentBoard[0])).handle, 'SEEDER');
+  check('merging a duplicate is refused',
+    await store.addTournamentScore(decoded.id, tournamentBoard[0]), false);
+  check('a result from elsewhere merges',
+    await store.addTournamentScore(decoded.id, { ...tournamentBoard[0], id: 'other', handle: 'TRINITY' }), true);
+  check('board now has both', (await store.listTournamentScores(decoded.id)).length, 2);
+
+  section('The run-over screen');
+  session.startNewRun({ handle: 'MOUSE', difficulty: 'pen-tester' });
+  state.run.executes = 1;
+  state.run.enemy.hp = state.run.enemy.max = 1e6; // unbreakable: the trace lands
+  rollDice();
+  settle();
+  await executePayload();
+  check('the trace ends the run', state.run.phase, 'over');
+
+  await new Promise(resolve => setTimeout(resolve, 1300)); // the alarm plays first
+  const modal = document.querySelector('#modal');
+  check('run-over screen is up', modal.classList.contains('open'), true);
+  check('it shows the banked score', /FINAL SCORE/.test(modal.textContent), true);
+  check('it names the runner', /MOUSE/.test(modal.textContent), true);
+  check('the run reached the board', (await store.listScores({ difficulty: 'pen-tester' })).length, 1);
+
+  say(failures ? `${failures} FAILURE(S)` : 'ALL CHECKS PASSED',
+    (failures ? 'fail' : 'pass') + ' total');
+} catch (error) {
+  say(`THREW: ${(error && error.stack) || error}`, 'fail');
+} finally {
+  restoreStorage();
+  if (ping) await Promise.all(sent);
+}
+</script>
+</body>
+</html>

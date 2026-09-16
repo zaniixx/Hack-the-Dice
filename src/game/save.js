@@ -6,6 +6,7 @@
  * that node rather than letting a bad roll be rerolled by refreshing.
  */
 import { readJSON, writeJSON, removeKey } from '../core/storage.js';
+import { rngState } from '../core/game-random.js';
 import { run, Phase } from './state.js';
 
 const SAVE_KEY = 'htd_save_v1';
@@ -21,6 +22,10 @@ export function saveRun() {
     handle: run.handle,
     difficulty: run.difficulty,
     tournament: run.tournament,
+    // The seed and where its stream had got to, so a resumed run keeps rolling
+    // the same sequence instead of starting the seed over.
+    seed: run.seed,
+    rng: rngState(),
     server: run.server,
     node: run.node,
     scrap: run.scrap,

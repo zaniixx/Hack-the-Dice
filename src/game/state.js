@@ -42,12 +42,16 @@ export let run = null;
  * @param {string} options.handle      the runner's name, for the leaderboards
  * @param {string} options.difficulty  threat level id
  * @param {?object} options.tournament the tournament being played, if any
+ * @param {string} options.seed        the seed this run's dice come from
  */
-export function createRun({ handle = '', difficulty = DEFAULT_DIFFICULTY, tournament = null } = {}) {
+export function createRun({
+  handle = '', difficulty = DEFAULT_DIFFICULTY, tournament = null, seed = '',
+} = {}) {
   run = {
     // Who is playing, and under what rules
-    handle: handle || 'ANON',
+    handle,
     difficulty,
+    seed,
     tournament: tournament
       ? { id: tournament.id, name: tournament.name, code: tournament.code }
       : null,

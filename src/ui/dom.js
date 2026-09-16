@@ -22,6 +22,7 @@ export const els = {
   corp: $('#tCorp'),
   node: $('#tNode'),
   scrap: $('#tScrap'),
+  seed: $('#tSeed'),
   best: $('#tBest'),
   speedButton: $('#btnSpeed'),
   soundButton: $('#btnSound'),

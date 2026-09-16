@@ -8,6 +8,8 @@
   z-index: 70;
   overflow-y: auto;
   padding: 24px 16px 40px;
+  display: flex;
+  justify-content: center;
   color: var(--ink);
   background:
     radial-gradient(120% 80% at 50% 0%, rgba(154, 123, 255, .16), transparent 70%),
@@ -16,8 +18,10 @@
 }
 
 .start-inner {
-  max-width: 1120px;
-  margin: 0 auto;
+  max-width: 1160px;
+  width: 100%;
+  /* Centres the block vertically when the viewport has room to spare. */
+  margin: auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -45,7 +49,7 @@
 
 .start-cols {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr);
+  grid-template-columns: minmax(230px, 0.85fr) minmax(360px, 2.6fr);
   gap: 14px;
   align-items: start;
 }
@@ -71,7 +75,7 @@
   letter-spacing: 1px;
 }
 
-.sec .dim { font-size: 15px; letter-spacing: 0; }
+.sec .dim { font-family: var(--vt); font-size: 14px; letter-spacing: 0; margin-left: 4px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 
@@ -124,7 +128,7 @@
 
 .tier-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -227,6 +231,52 @@
 .error { font-size: 18px; color: var(--red); margin: 0; }
 .notice { font-size: 18px; color: var(--lime); margin: 0; }
 
+/* ---- Invite: op code and QR ---------------------------------------------- */
+
+.invite {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  background: var(--screen-2);
+  border: 2px solid var(--screen-line);
+}
+
+.invite-code { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.invite-label { font-family: var(--px); font-size: 8px; color: var(--dim); }
+
+.op-code {
+  font-family: var(--px);
+  font-size: clamp(24px, 5vw, 42px);
+  line-height: 1.2;
+  color: var(--lime);
+  letter-spacing: 6px;
+  text-shadow: 3px 3px 0 #000;
+  word-break: break-all;
+}
+
+.invite-note { font-size: 16px; color: var(--dim); line-height: 1.05; }
+
+.invite-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 40vw;
+}
+
+.invite-qr .invite-note { text-align: center; }
+
+.qr {
+  display: block;
+  image-rendering: pixelated;
+  border: 3px solid var(--ink);
+  max-width: 100%;
+  height: auto;
+}
+
 /* ---- Leaderboard --------------------------------------------------------- */
 
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -278,6 +328,27 @@
 .board tr.rank-2 .rank, .board tr.rank-2 .score { color: var(--ink); }
 .board tr.rank-3 .rank, .board tr.rank-3 .score { color: var(--violet); }
 .board tr.mine { background: rgba(61, 242, 255, .08); }
+
+/* A run still in progress: its score is provisional and its row is alive. */
+.board tr.live .score { color: var(--lime); }
+.board tr.live .when { color: var(--lime); }
+
+.live-tag {
+  font-family: var(--px);
+  font-size: 6px;
+  color: #07060f;
+  background: var(--lime);
+  padding: 2px 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+  animation: livepulse 1.4s steps(2) infinite;
+}
+
+@keyframes livepulse { 50% { opacity: .45; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-tag { animation: none; }
+}
 
 /* ---- Tournaments --------------------------------------------------------- */
 
@@ -375,6 +446,8 @@
 
 @media (max-width: 760px) {
   .start-screen { padding: 16px 12px 32px; }
+  .invite { grid-template-columns: minmax(0, 1fr); }
+  .invite-qr { max-width: 100%; }
   .start-cols { grid-template-columns: minmax(0, 1fr); }
   .start-actions .btn { flex: 1 1 140px; }
   .board { font-size: 16px; }

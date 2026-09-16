@@ -10,6 +10,7 @@ import { DICE } from '../data/dice.js';
 import { ARTIFACTS } from '../data/artifacts.js';
 import { ABILITIES } from '../data/abilities.js';
 import { ItemKind, definitionOf, definitionIn, idsOf } from '../data/catalog.js';
+import { gameFloat } from '../core/game-random.js';
 import { sfx } from '../audio/sfx.js';
 import { setDicePool } from '../engine/dice-board.js';
 import { log } from '../ui/log.js';
@@ -32,7 +33,7 @@ function pickWeighted(kind, ids) {
 
   const tier = topTier();
   const pool = ids.map(id => ({ id, weight: definitionIn(kind, id).tier === tier ? 2 : 1 }));
-  let roll = Math.random() * pool.reduce((total, entry) => total + entry.weight, 0);
+  let roll = gameFloat() * pool.reduce((total, entry) => total + entry.weight, 0);
   for (const entry of pool) {
     roll -= entry.weight;
     if (roll < 0) return entry.id;

@@ -22,6 +22,7 @@ import { executePayload } from './game/execute.js';
 import { buyItem, sellItem, refreshShop } from './game/shop.js';
 import { beginNode, breachNode, showTitle, openMenu } from './game/session.js';
 import { tickMemoryLeak } from './game/memory-leak.js';
+import { stopLiveRun } from './game/live-run.js';
 
 /** Longest frame the simulation will accept, so a stalled tab cannot teleport dice. */
 const MAX_FRAME_SECONDS = 0.05;
@@ -85,9 +86,23 @@ function diceAreTrayed() {
     || (run.phase === Phase.READY && !run.rolledOnce);
 }
 
-function handleResize() {
-  if (!syncBoardSize()) return;
-  if (diceAreTrayed()) layoutTray();
+let resizeQueued = false;
+
+/**
+ * Resize on the next frame rather than inside the observer callback.
+ *
+ * Resizing the canvas from inside the callback makes the observer fire again
+ * in the same delivery cycle, which browsers report as a ResizeObserver loop.
+ * Deferring keeps the DOM writes out of that cycle.
+ */
+function onContainerResize() {
+  if (resizeQueued) return;
+  resizeQueued = true;
+  requestAnimationFrame(() => {
+    resizeQueued = false;
+    if (!syncBoardSize()) return;
+    if (diceAreTrayed()) layoutTray();
+  });
 }
 
 function start() {
@@ -97,7 +112,7 @@ function start() {
   initBoardView(els.boardCanvas, els.boardWrap);
   initEnemyView(els.enemyCanvas);
   syncBoardSize();
-  new ResizeObserver(handleResize).observe(els.boardWrap);
+  new ResizeObserver(onContainerResize).observe(els.boardWrap);
 
   setDicePool(run.dice);
   resetEnemyView();
@@ -116,6 +131,10 @@ function start() {
     nextNode: beginNode,
     openMenu,
   });
+
+  // Leaving mid-run takes the runner out of the lobby straight away, rather
+  // than leaving a ghost there until the heartbeat expires.
+  addEventListener('pagehide', stopLiveRun);
 
   requestAnimationFrame(frame);
   showTitle();

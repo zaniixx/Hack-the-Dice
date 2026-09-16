@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hack the Dice — QR test</title>
+<style>
+  body { background:#0b0a14; color:#dfe6ff; font:13px/1.5 ui-monospace, monospace; padding:14px; }
+  h1 { font-size:14px; color:#3df2ff; margin:0 0 8px; }
+  .pass { color:#b6ff3d; }
+  .fail { color:#ff4d6d; font-weight:bold; }
+</style>
+</head>
+<body>
+<h1>Hack the Dice — QR encoder test</h1>
+<div id="out"></div>
+
+<script type="module">
+/*
+ * Checks the QR encoder against an independent reader written here: it undoes
+ * the mask, walks the zigzag itself, and parses the header, so a mistake in the
+ * encoder's placement or masking shows up as a failed round trip rather than
+ * agreeing with itself. It also verifies the format information's BCH code and
+ * that each full codeword block divides cleanly by its generator polynomial —
+ * the same two things a scanner checks first.
+ *
+ * Open it through a static server; append ?ping to mirror the result to the
+ * server log for headless runs.
+ */
+import { qrMatrix, qrSVG, reservedMap, generatorPoly } from '../src/render/qr.js';
+
+const out = document.getElementById('out');
+let failures = 0;
+const say = (t, c) => out.insertAdjacentHTML('beforeend', `<div class="${c}">${t}</div>`);
+const check = (name, a, b) => {
+  const ok = JSON.stringify(a) === JSON.stringify(b);
+  if (!ok) failures++;
+  say(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` — got ${JSON.stringify(a)}, want ${JSON.stringify(b)}`}`, ok ? 'pass' : 'fail');
+  return ok;
+};
+
+const DATA_CODEWORDS = [19, 34, 55, 80, 108, 136];
+const ALPHANUMERIC = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+const MASKS = [
+  (r,c)=>(r+c)%2===0, r=>r%2===0, (r,c)=>c%3===0, (r,c)=>(r+c)%3===0,
+  (r,c)=>(Math.floor(r/2)+Math.floor(c/3))%2===0, (r,c)=>((r*c)%2)+((r*c)%3)===0,
+  (r,c)=>(((r*c)%2)+((r*c)%3))%2===0, (r,c)=>(((r+c)%2)+((r*c)%3))%2===0,
+];
+
+/* An independent reader: unmask, walk the zigzag, parse the header. */
+function decode(qr) {
+  const { size, modules, mask, version } = qr;
+  const reserved = reservedMap(version);
+
+  const grid = modules.map((row, r) => row.map((bit, c) =>
+    reserved[r][c] ? bit : bit ^ (MASKS[mask](r, c) ? 1 : 0)));
+
+  const bits = [];
+  let upward = true;
+  for (let right = size - 1; right > 0; right -= 2) {
+    if (right === 6) right = 5;
+    for (let step = 0; step < size; step++) {
+      const row = upward ? size - 1 - step : step;
+      for (const col of [right, right - 1]) {
+        if (!reserved[row][col]) bits.push(grid[row][col]);
+      }
+    }
+    upward = !upward;
+  }
+
+  const codewords = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) {
+    codewords.push(bits.slice(i, i + 8).reduce((b, x) => (b << 1) | x, 0));
+  }
+
+  let at = 0;
+  const take = n => { let v = 0; for (let i = 0; i < n; i++) v = (v << 1) | bits[at++]; return v; };
+  const mode = take(4);
+  let text = '';
+  if (mode === 0b0010) {
+    let count = take(9);
+    while (count >= 2) { const pair = take(11); text += ALPHANUMERIC[Math.floor(pair / 45)] + ALPHANUMERIC[pair % 45]; count -= 2; }
+    if (count === 1) text += ALPHANUMERIC[take(6)];
+  } else if (mode === 0b0100) {
+    const count = take(8);
+    const bytes = [];
+    for (let i = 0; i < count; i++) bytes.push(take(8));
+    text = new TextDecoder().decode(new Uint8Array(bytes));
+  }
+  return { text, mode, codewords, dataCodewords: codewords.slice(0, DATA_CODEWORDS[version - 1]) };
+}
+
+/* Read the 15 format bits back out and check their BCH code. */
+function readFormat(qr) {
+  const { modules, size } = qr;
+  let bits = 0;
+  for (let i = 0; i < 15; i++) {
+    let bit;
+    if (i < 6) bit = modules[8][i];
+    else if (i === 6) bit = modules[8][7];
+    else if (i === 7) bit = modules[8][8];
+    else if (i === 8) bit = modules[7][8];
+    else bit = modules[14 - i][8];
+    bits |= bit << i;
+  }
+  const raw = bits ^ 0b101010000010010;
+  let rem = raw;
+  for (let i = 14; i >= 10; i--) if ((rem >> i) & 1) rem ^= 0b10100110111 << (i - 10);
+  return { level: (raw >> 13) & 0b11, mask: (raw >> 10) & 0b111, bchRemainder: rem, bits };
+}
+
+/* The second copy of the format bits must agree with the first. */
+function readFormatCopy(qr) {
+  const { modules, size } = qr;
+  let bits = 0;
+  for (let i = 0; i < 15; i++) {
+    const bit = i < 7 ? modules[size - 1 - i][8] : modules[8][size - 15 + i];
+    bits |= bit << i;
+  }
+  return bits;
+}
+
+const GF_EXP = new Uint8Array(512), GF_LOG = new Uint8Array(256);
+{ let x = 1; for (let i = 0; i < 255; i++) { GF_EXP[i] = x; GF_LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+  for (let i = 255; i < 512; i++) GF_EXP[i] = GF_EXP[i - 255]; }
+const mul = (a, b) => (a && b ? GF_EXP[GF_LOG[a] + GF_LOG[b]] : 0);
+
+/* A full codeword block must divide cleanly by the generator polynomial. */
+function divisible(codewords, eccLength) {
+  const gen = generatorPoly(eccLength);
+  const buf = [...codewords];
+  for (let i = 0; i < buf.length - eccLength; i++) {
+    const factor = buf[i];
+    if (!factor) continue;
+    for (let j = 0; j < gen.length; j++) buf[i + j] ^= mul(gen[j], factor);
+  }
+  return buf.slice(buf.length - eccLength).every(v => v === 0);
+}
+
+const ECC = [7, 10, 15, 20, 26, 36];
+const samples = [
+  'HTD-ABC12',
+  'HTD-K7M4X2QRSTVWXYZ0123456789ABCDEFGH',
+  'HTD-' + 'ZYXWVTSRQNMKJHGFEDCBA9876543210'.repeat(2),
+  'http://192.168.1.42:8000/#join=HTD-K7M4XQRSTVWXYZ0123456789',
+  'HELLO WORLD',
+];
+
+for (const text of samples) {
+  const qr = qrMatrix(text);
+  if (!check(`encodes (${text.length} chars)`, !!qr, true)) continue;
+
+  const decoded = decode(qr);
+  check(`round trips (v${qr.version}, mask ${qr.mask})`, decoded.text, text);
+
+  const format = readFormat(qr);
+  check('format says level L', format.level, 0b01);
+  check('format says the mask used', format.mask, qr.mask);
+  check('format BCH is valid', format.bchRemainder, 0);
+  check('both format copies agree', readFormatCopy(qr), format.bits);
+  check('error correction divides cleanly', divisible(decoded.codewords, ECC[qr.version - 1]), true);
+
+  // Structure a scanner looks for first.
+  const m = qr.modules;
+  check('finder corners are dark', [m[0][0], m[0][qr.size - 1], m[qr.size - 1][0]], [1, 1, 1]);
+  check('timing pattern alternates',
+    [m[6][8], m[6][9], m[6][10]], [1, 0, 1]);
+  check('quiet dark module', m[qr.size - 8][8], 1);
+}
+
+check('too long is refused', qrMatrix('X'.repeat(200)), null);
+check('svg renders', qrSVG('HTD-ABC12').startsWith('<svg'), true);
+
+say(failures ? `${failures} FAILURE(S)` : 'QR CHECKS PASSED', failures ? 'fail' : 'pass');
+if (location.search.includes('ping')) {
+  await fetch('/__t/' + encodeURIComponent(failures ? `${failures} QR FAILURE(S)` : 'QR CHECKS PASSED')).catch(() => {});
+}
+out.insertAdjacentHTML('beforeend',
+  '<p>A real code, for scanning with a phone:</p>' + qrSVG(samples[1], { moduleSize: 6 }));
+</script>
+</body></html>

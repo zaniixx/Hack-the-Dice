@@ -7,7 +7,7 @@
  */
 import { fmt } from '../core/format.js';
 import { sleep } from '../core/time.js';
-import { pick } from '../core/random.js';
+import { gamePick, seedRun, restoreRng } from '../core/game-random.js';
 import {
   BOSS_NODE, MIN_DICE, CACHE_SCRAP_BONUS, INTEREST_PER_SCRAP, MAX_INTEREST,
 } from '../data/rules.js';
@@ -36,6 +36,7 @@ import { run, Phase, createRun, hasArtifact, isBusy } from './state.js';
 import { saveRun, loadSavedRun, clearSavedRun, loadBest, recordBest } from './save.js';
 import { openShop, generateShop } from './shop.js';
 import { resetLeak, stopLeak } from './memory-leak.js';
+import { startLiveRun, publish as publishLiveRun, stopLiveRun } from './live-run.js';
 import { firewallHP, executesPerNode } from './difficulty.js';
 import { bossForNode, setActiveTournament, decodeTournament } from './tournament.js';
 import { submitRun } from './leaderboard.js';
@@ -59,11 +60,11 @@ function createEnemy() {
   const max = firewallHP(run.server, run.node);
 
   return {
-    name: bossKey ? BOSSES[bossKey].name : pick(NODE_NAMES),
+    name: bossKey ? BOSSES[bossKey].name : gamePick(NODE_NAMES),
     hp: max,
     max,
     boss: bossKey,
-    sprite: bossKey ? BOSSES[bossKey].sprite : pick(NODE_SPRITES),
+    sprite: bossKey ? BOSSES[bossKey].sprite : gamePick(NODE_SPRITES),
     color: SERVER_COLORS[(run.server - 1) % SERVER_COLORS.length],
   };
 }
@@ -100,6 +101,7 @@ export function beginNode() {
   log(`> firewall integrity ${fmt(enemy.max)} — ${run.executes} executes before trace`, 'cyan');
 
   saveRun();
+  publishLiveRun(); // the lobby sees the runner arrive at the node
   updateUI();
 }
 
@@ -149,6 +151,7 @@ export async function breachNode() {
   run.stats.scrap += total; // banked for the leaderboard score
   await fly(`+${total} SCRAP`, centerOf(els.enemyCanvas), centerOf(els.scrap), { cls: 'c-x', dur: 800 });
   sfx.coin();
+  publishLiveRun(); // a breach is a place change: the lobby should feel it
   updateUI();
   bump(els.scrap);
 
@@ -209,6 +212,7 @@ export async function traced() {
  * never lost to a player who would rather stop than be traced.
  */
 async function bankRun(reason) {
+  stopLiveRun(); // it stops being a runner in progress and becomes a result
   log(`> run banked: ${fmt(runScore(run))} points for ${run.handle}`, 'amber');
   const result = await submitRun(run, { reason });
   rememberResult(result.entry); // so the player can hand its code to a host
@@ -227,7 +231,9 @@ function showRunOver({ entry, rank, tournamentRank, isBest = false }) {
     tournamentRank,
     tournament: run.tournament,
     onRestart: showTitle,
-    onLeaderboard: () => showTitle(run.tournament ? 'tournaments' : 'leaderboard'),
+    onLeaderboard: () => (run.tournament
+      ? showTitle('tournament', run.tournament.id)
+      : showTitle('leaderboard')),
   });
 }
 
@@ -251,12 +257,17 @@ export async function abandonRun() {
  * @param {string} options.handle      the runner's name, shown on the boards
  * @param {string} options.difficulty  threat level id
  * @param {?object} options.tournament tournament to play under, or null
+ * @param {string} options.seed        a seed to play, or blank for a fresh one
  */
-export function startNewRun({ handle, difficulty, tournament = null } = {}) {
+export function startNewRun({ handle, difficulty, tournament = null, seed = '' } = {}) {
   hideModal();
   clearSavedRun();
   setActiveTournament(tournament);
-  createRun({ handle, difficulty, tournament });
+
+  // A tournament that fixes a seed overrides the player's: everyone rolls the
+  // same dice, which is what turns a tournament into a race.
+  const runSeed = seedRun((tournament && tournament.seed) || seed);
+  createRun({ handle: handle || 'ANON', difficulty, tournament, seed: runSeed });
   clearLog();
   clearAlarm();
 
@@ -264,9 +275,11 @@ export function startNewRun({ handle, difficulty, tournament = null } = {}) {
   sfx.boot();
   log(`> handshake accepted. welcome back, ${run.handle}.`, 'mag');
   log(`> threat level: ${difficultyOf(run.difficulty).name}`, 'cyan');
+  log(`> seed: ${runSeed}`, 'dim');
   if (tournament) log(`> tournament rules in force: ${tournament.name}`, 'amber');
   log('> tip: lock high dice, reroll low ones, then execute.', 'dim');
   beginNode();
+  startLiveRun();
 }
 
 /**
@@ -278,10 +291,13 @@ export function startNewRun({ handle, difficulty, tournament = null } = {}) {
 export function resumeRun(saved) {
   // Saves written before threat levels existed resume on the default tier.
   setActiveTournament(saved.tournament ? decodeTournament(saved.tournament.code) : null);
+  // Pick the stream back up where it stopped, rather than re-seeding it.
+  restoreRng(saved.seed || '', saved.rng);
   createRun({
     handle: saved.handle,
     difficulty: saved.difficulty,
     tournament: saved.tournament,
+    seed: saved.seed || '',
   });
   clearLog();
 
@@ -317,9 +333,10 @@ export function resumeRun(saved) {
 }
 
 /** The arcade start screen: sign in, pick a threat level, or browse boards. */
-export function showTitle(view) {
+export function showTitle(view, tournamentId = null) {
   openStartScreen({
     view,
+    tournamentId,
     saved: loadSavedRun(),
     best: loadBest(),
     onStart: startNewRun,

@@ -53,6 +53,11 @@
   image-rendering:pixelated;
   vertical-align:middle;
 }
+.stat .copyable {
+  cursor: pointer;
+  border-bottom: 1px dotted var(--case-dim);
+}
+.stat .copyable:hover { color: var(--mag); }
 .spacer { flex:1; }
 .topbtns {
   display:flex;
