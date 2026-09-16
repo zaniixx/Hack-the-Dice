@@ -1,0 +1,54 @@
+/* Shared button styles. */
+
+/* buttons */
+.btn {
+  font-family:var(--px);
+  font-size:11px;
+  letter-spacing:1px;
+  padding:12px 12px;
+  background:var(--screen);
+  color:var(--ink);
+  border:2px solid var(--dim);
+  box-shadow:0 4px 0 #000;
+  cursor:pointer;
+  position:relative;
+  white-space:nowrap;
+}
+.btn:hover:not(:disabled) { filter:brightness(1.3); }
+.btn:active:not(:disabled) {
+  transform:translateY(3px);
+  box-shadow:0 1px 0 #000;
+}
+.btn:disabled {
+  opacity:.35;
+  cursor:not-allowed;
+}
+.btn:focus-visible,.abil:focus-visible,.x:focus-visible {
+  outline:2px dashed var(--amber);
+  outline-offset:2px;
+}
+.btn.cyan {
+  border-color:var(--cyan);
+  color:var(--cyan);
+  box-shadow:0 4px 0 #0a5a66;
+}
+.btn.mag {
+  border-color:var(--mag);
+  color:var(--mag);
+  box-shadow:0 4px 0 #6a1466;
+}
+.btn.lime {
+  border-color:var(--lime);
+  color:var(--lime);
+  box-shadow:0 4px 0 #3d5a0f;
+}
+.btn.sm {
+  font-size:8px;
+  padding:8px 9px;
+  box-shadow:0 3px 0 #000;
+}
+.btn.wide { width:100%; }
+.btn.pulse:not(:disabled) { animation:btnpulse 1s steps(2) infinite; }
+@keyframes btnpulse{50%{background:#1d1840}}
+
+

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hack the Dice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+
+<!-- Stylesheets are loaded in cascade order: tokens and base first, then one
+     file per region of the console, then effects and responsive overrides. -->
+<link rel="stylesheet" href="src/styles/tokens.css">
+<link rel="stylesheet" href="src/styles/base.css">
+<link rel="stylesheet" href="src/styles/layout.css">
+<link rel="stylesheet" href="src/styles/target.css">
+<link rel="stylesheet" href="src/styles/board.css">
+<link rel="stylesheet" href="src/styles/buttons.css">
+<link rel="stylesheet" href="src/styles/toolkit.css">
+<link rel="stylesheet" href="src/styles/effects.css">
+<link rel="stylesheet" href="src/styles/arcade.css">
+<link rel="stylesheet" href="src/styles/responsive.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="logo">HACK<b>THE</b>DICE</div>
+    <div class="stat"><small>Runner</small><span id="tHandle">—</span><em id="tTier"></em></div>
+    <div class="stat"><small>Server</small><span id="tServer">1</span><em id="tCorp">OMNIDYNE</em></div>
+    <div class="stat"><small>Node</small><span id="tNode">1/5</span></div>
+    <div class="stat"><small>Data scrap</small><span id="tScrap">0</span></div>
+    <div class="stat"><small>Best run</small><span id="tBest">—</span></div>
+    <div class="stat" id="tOpWrap" hidden><small>Tournament</small><span id="tOp"></span></div>
+    <div class="spacer"></div>
+    <div class="topbtns">
+      <button class="btn sm" id="btnSpeed" title="Animation speed">SPD 1×</button>
+      <button class="btn sm" id="btnSound" title="Toggle sound">SND ON</button>
+      <button class="btn sm" id="btnMenu">MENU</button>
+    </div>
+  </header>
+
+  <main class="grid" id="grid">
+    <section class="panel left" aria-label="Target">
+      <div class="ptitle"><span>TARGET</span><span class="tag" id="nodeTag">NODE 1/5</span></div>
+      <div class="screen target">
+        <div class="ename" id="nodeName">NO TARGET</div>
+        <div class="ecan-wrap"><canvas id="enemy" width="64" height="48"></canvas><div class="eoverlay" id="eOverlay"></div></div>
+        <div class="fw">
+          <div class="fw-top"><span>FIREWALL</span><span id="fwText">OFFLINE</span></div>
+          <div class="fw-bar" id="fwBar"><i class="ghost" id="fwGhost"></i><i class="fill" id="fwFill"></i></div>
+        </div>
+        <div class="bossrule" id="bossRule"></div>
+      </div>
+      <div class="screen logbox"><div class="log" id="log" aria-live="polite"></div></div>
+    </section>
+
+    <section class="panel center" aria-label="Board">
+      <div class="arts" id="arts"></div>
+      <div class="screen board-wrap" id="boardWrap">
+        <canvas id="board"></canvas>
+        <div class="combo" id="combo"></div>
+        <div class="hint" id="hint"></div>
+      </div>
+      <div class="screen scorebar">
+        <div class="sbox bits"><span class="lbl">BITS</span><span class="val" id="bits">0</span></div>
+        <span class="op">×</span>
+        <div class="sbox mult"><span class="lbl">MULT</span><span class="val" id="mult">1</span></div>
+        <span class="op">=</span>
+        <div class="sbox power"><span class="lbl">HACKING POWER</span><span class="val" id="power">0</span></div>
+      </div>
+      <div class="controls">
+        <div class="meters">
+          <div class="meter">Executes left <span class="pips" id="execPips"></span></div>
+          <div class="meter">Rerolls <span class="pips rr" id="rerollPips"></span></div>
+        </div>
+        <div class="btnrow">
+          <button class="btn cyan" id="btnRoll">ROLL</button>
+          <button class="btn" id="btnReroll">REROLL</button>
+          <button class="btn mag" id="btnExec">EXECUTE</button>
+        </div>
+        <div class="abils" id="abils"></div>
+      </div>
+    </section>
+
+    <section class="panel right" aria-label="Toolkit">
+      <div class="ptitle"><span>TOOLKIT</span><span class="tag">Black market + rig</span></div>
+      <div class="screen toolkit" id="toolkit">
+        <div class="sec-h">BLACK MARKET <button class="btn sm" id="btnShopReroll">REFRESH</button></div>
+        <div class="shop" id="shop"></div>
+        <button class="btn lime wide" id="btnNext" hidden>BREACH NEXT NODE</button>
+        <div class="sec-h">DICE POOL <span id="diceCount"></span></div>
+        <div class="inv" id="diceInv"></div>
+        <div class="sec-h">ABILITIES <span id="abilCount"></span></div>
+        <div id="abilInv"></div>
+        <div class="sec-h">CYBERARTIFACTS <span id="artCount"></span></div>
+        <div id="artInv"></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="start" class="start-screen" hidden></div>
+<div id="fx"></div>
+<div id="modal" role="dialog" aria-modal="true"></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

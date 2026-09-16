@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hack the Dice — playthrough test</title>
+<style>
+  body { background:#0b0a14; color:#dfe6ff; font:13px/1.5 ui-monospace, monospace; margin:0; }
+  #report { position:fixed; inset:0 0 auto 0; z-index:999; background:#08070fee; padding:10px 14px;
+            max-height:100vh; overflow:auto; border-bottom:2px solid #241e42; }
+  #report h1 { font-size:14px; color:#3df2ff; margin:0 0 8px; }
+  #report h2 { font-size:12px; color:#9a7bff; margin:10px 0 2px; }
+  .pass { color:#b6ff3d; }
+  .fail { color:#ff4d6d; font-weight:bold; }
+  .total { font-size:14px; margin-top:10px; }
+</style>
+</head>
+<body>
+<div id="report"><h1>Hack the Dice — playthrough test</h1><div id="lines">running...</div></div>
+
+<script type="module">
+/*
+ * End-to-end test. It loads the real markup from index.html, boots the real
+ * game, and drives it through a node, the three boss rules, a trace, a
+ * migration, and a save/resume round trip.
+ *
+ * Open it through a static server (see the README). Append ?ping to also mirror
+ * each result to the server log, which is how it is run headlessly.
+ *
+ * The player's saved run and personal best are stashed and restored, so running
+ * this does not cost anyone their progress.
+ */
+const report = document.getElementById('lines');
+const ping = location.search.includes('ping');
+const sent = [];
+let failures = 0;
+
+function say(html, cls = '') {
+  report.insertAdjacentHTML('beforeend', `<div class="${cls}">${html}</div>`);
+  if (ping) sent.push(fetch('/__t/' + encodeURIComponent(html.replace(/<[^>]+>/g, ''))).catch(() => {}));
+}
+function section(title) {
+  report.insertAdjacentHTML('beforeend', `<h2>${title}</h2>`);
+}
+function check(name, actual, expected) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (!ok) failures++;
+  say(`${ok ? 'PASS' : 'FAIL'} ${name}` +
+    (ok ? '' : ` — got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`),
+    ok ? 'pass' : 'fail');
+}
+window.onerror = (message, file, lineNo) => { failures++; say(`ERROR ${message} @${lineNo}`, 'fail'); };
+addEventListener('unhandledrejection', event => {
+  failures++;
+  say(`REJECTION ${(event.reason && event.reason.stack) || event.reason}`, 'fail');
+});
+
+// Keep the player's progress out of this.
+const savedStorage = { ...localStorage };
+const restoreStorage = () => {
+  localStorage.clear();
+  for (const [key, value] of Object.entries(savedStorage)) localStorage.setItem(key, value);
+};
+
+// Boot the real page: its markup, its stylesheets, its entry point.
+const page = await (await fetch('../index.html')).text();
+const markup = page.split('<body>')[1].split('<script')[0];
+document.head.insertAdjacentHTML('beforeend',
+  [...page.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)]
+    .map(m => `<link rel="stylesheet" href="../${m[1]}">`).join(''));
+document.body.insertAdjacentHTML('beforeend', markup);
+
+await import('../src/main.js');
+
+const { settings } = await import('../src/core/settings.js');
+// Namespace import, not a destructure: `run` is a live binding that starting a
+// new run replaces, and a destructured copy would go stale.
+const state = await import('../src/game/state.js');
+const { startNewRun, beginNode, resumeRun } = await import('../src/game/session.js');
+const { rollDice, rerollDice, onDiceSettled, refreshPreview, useAbility } = await import('../src/game/turn.js');
+const { executePayload } = await import('../src/game/execute.js');
+const { buyItem, sellItem, refreshShop } = await import('../src/game/shop.js');
+const { loadSavedRun, saveRun } = await import('../src/game/save.js');
+const { isLeakDraining, tickMemoryLeak } = await import('../src/game/memory-leak.js');
+const board = await import('../src/engine/dice-board.js'); // `dice` is a live binding too
+const { nodeHP } = await import('../src/data/enemies.js');
+const { els } = await import('../src/ui/dom.js');
+
+/** Skip the tumble: drop the dice where they are and hand control back. */
+const settle = () => { board.forceSettleAll(); onDiceSettled(); };
+const setFaces = values => board.dice.forEach((die, i) => { die.value = die.shownValue = values[i % values.length]; });
+
+try {
+  report.innerHTML = '';
+  settings.speed = 4; // run the scoring animation at 4x
+
+  section('A node, start to finish');
+  check('starts at the title', state.run.phase, 'title');
+  startNewRun();
+  check('node loaded', state.run.phase, 'ready');
+  check('four executes', state.run.executes, 4);
+  check('first firewall', state.run.enemy.max, 40);
+  check('five dice on the board', board.dice.length, 5);
+
+  rollDice();
+  check('dice are rolling', state.run.phase, 'rolling');
+  settle();
+  check('player may act', state.run.phase, 'manip');
+  check('two rerolls', state.run.rerolls, 2);
+  check('preview shows bits', Number(els.bits.textContent.replace(/,/g, '')) > 0, true);
+  rerollDice();
+  check('reroll spends one', state.run.rerolls, 1);
+  settle();
+
+  // A firewall too big to break, so the execute resolves without breaching.
+  state.run.enemy.hp = state.run.enemy.max = 1e6;
+  await executePayload();
+  check('damage was dealt', state.run.stats.dmg > 0, true);
+  check('execute was spent', state.run.executes, 3);
+  check('ready for the next roll', state.run.phase, 'ready');
+
+  section('Breach and market');
+  const scrapBefore = state.run.scrap;
+  state.run.enemy.hp = 1;
+  rollDice();
+  settle();
+  await executePayload();
+  check('breached into the market', state.run.phase, 'shop');
+  check('node advanced', state.run.node, 2);
+  check('breach was counted', state.run.stats.nodes, 1);
+  check('scrap harvested', state.run.scrap > scrapBefore, true);
+  check('market has offers', state.run.shop.length, 4);
+  check('run was saved', !!loadSavedRun(), true);
+
+  state.run.scrap = 99;
+  const ownedBefore = state.run.artifacts.length + state.run.dice.length + state.run.abilities.length;
+  buyItem(0);
+  check('bought the first offer', state.run.artifacts.length + state.run.dice.length + state.run.abilities.length, ownedBefore + 1);
+  check('scrap was spent', state.run.scrap < 99, true);
+  const afterBuy = state.run.scrap;
+  refreshShop();
+  check('refresh cost scrap', state.run.scrap < afterBuy, true);
+  check('refresh restocked', state.run.shop.length, 4);
+  const diceBefore = state.run.dice.length;
+  sellItem('die', 0);
+  check('sold a die', state.run.dice.length, diceBefore - 1);
+  beginNode();
+  check('second node ready', state.run.phase, 'ready');
+  check('second firewall', state.run.enemy.max, nodeHP(1, 2));
+
+  section('Boss protocols');
+  startNewRun();
+  state.run.enemy.boss = 'antivirus';
+  rollDice();
+  settle();
+  check('antivirus quarantines one', board.dice.filter(die => die.quarantined).length, 1);
+
+  state.run.enemy.boss = 'watchdog';
+  board.dice.forEach(die => { die.quarantined = false; });
+  setFaces([2]);
+  refreshPreview();
+  check('watchdog absorbs low dice', els.bits.textContent, '0');
+  setFaces([6]);
+  refreshPreview();
+  check('watchdog spares high dice', els.bits.textContent, String(6 * board.dice.length));
+
+  state.run.enemy.boss = 'encryption';
+  state.run.enemy.hp = state.run.enemy.max = 1e6;
+  state.run.executes = state.run.maxExecutes = 4;
+  setFaces([1, 2, 3, 4, 5]); // no pair: the cipher shield holds
+  const beforeCipher = state.run.stats.dmg;
+  await executePayload();
+  check('cipher shield absorbs 90%', state.run.stats.dmg - beforeCipher, Math.floor(15 * 0.1));
+
+  section('Losing, and moving up');
+  state.run.executes = 1;
+  state.run.phase = 'ready';
+  rollDice();
+  settle();
+  await executePayload();
+  check('trace ends the run', state.run.phase, 'over');
+  check('save was cleared', loadSavedRun(), null);
+
+  startNewRun();
+  state.run.node = 5;
+  beginNode();
+  check('node five is a boss', !!state.run.enemy.boss, true);
+  check('boss rule is shown', els.bossRule.textContent.length > 0, true);
+  state.run.enemy.hp = 1;
+  rollDice();
+  settle();
+  await executePayload();
+  check('migrated up a server', state.run.server, 2);
+  check('back to node one', state.run.node, 1);
+  check('opens in the market', state.run.phase, 'shop');
+
+  section('Special dice, abilities and the leak');
+  startNewRun();
+  state.run.dice = ['virus', 'amp', 'qubit', 'mirror', 'd12'];
+  board.setDicePool(state.run.dice);
+  state.run.artifacts = ['overclock', 'brute', 'hash', 'quantum', 'recursive', 'memleak'];
+  state.run.abilities = ['bitshift', 'overdrive', 'rootkit'];
+  state.run.charges = { bitshift: 1, overdrive: 1, rootkit: 1 };
+  state.run.enemy.hp = state.run.enemy.max = 1e9;
+
+  rollDice();
+  settle();
+  board.dice.forEach(die => { die.value = die.shownValue = die.type === 'd12' ? 11 : 5; });
+  useAbility('bitshift');
+  check('bit shift raised every die', board.dice.every(die => die.value === (die.type === 'd12' ? 12 : 6)), true);
+  check('bit shift spent its charge', state.run.charges.bitshift, 0);
+  useAbility('overdrive');
+  check('overdrive is armed', state.run.overdrive, true);
+  useAbility('rootkit');
+  check('rootkit added an execute', state.run.executes, 5);
+
+  const beforeRig = state.run.stats.dmg;
+  await executePayload();
+  check('special dice scored', state.run.stats.dmg > beforeRig, true);
+  check('multipliers stacked up', Number(els.mult.textContent) > 1, true);
+  check('overdrive was consumed', state.run.overdrive, false);
+  check('memory leak is draining', isLeakDraining(), true);
+  const hpBeforeLeak = state.run.enemy.hp;
+  for (let i = 0; i < 40; i++) tickMemoryLeak(0.05);
+  check('memory leak drains the firewall', state.run.enemy.hp < hpBeforeLeak, true);
+
+  state.run.phase = 'shop';
+  sellItem('art', 0);
+  check('sold an artifact', state.run.artifacts.length, 5);
+  sellItem('abil', 0);
+  check('sold an ability', state.run.abilities.length, 2);
+
+  section('Saving and resuming');
+  state.run.phase = 'ready';
+  state.run.server = 3;
+  state.run.node = 4;
+  state.run.scrap = 42;
+  saveRun();
+  const saved = loadSavedRun();
+  check('save recorded progress', [saved.server, saved.node, saved.scrap], [3, 4, 42]);
+  resumeRun(saved);
+  check('resumed the server', state.run.server, 3);
+  check('resumed into a node', state.run.phase, 'ready');
+  check('resumed enemy exists', !!state.run.enemy, true);
+
+  state.run.phase = 'shop';
+  saveRun();
+  resumeRun(loadSavedRun());
+  check('a market save resumes in the market', state.run.phase, 'shop');
+  check('market has offers', state.run.shop.length > 0, true);
+
+  resumeRun({
+    v: 1, server: 1, node: 1, scrap: 5,
+    dice: ['d6', 'nonsense'], artifacts: ['ghost', 'bogus'], abilities: ['nope'],
+    stacks: {}, stats: { dmg: 0, nodes: 0, biggest: 0 }, at: 'node', shop: [],
+  });
+  check('unknown dice dropped', state.run.dice, ['d6', 'd6', 'd6']);
+  check('unknown artifacts dropped', state.run.artifacts, ['ghost']);
+  check('unknown abilities dropped', state.run.abilities, []);
+  check('ghost protocol grants an execute', state.run.executes, 5);
+
+  say(failures ? `${failures} FAILURE(S)` : 'ALL CHECKS PASSED',
+    (failures ? 'fail' : 'pass') + ' total');
+} catch (error) {
+  say(`THREW: ${(error && error.stack) || error}`, 'fail');
+} finally {
+  restoreStorage();
+  if (ping) await Promise.all(sent);
+}
+</script>
+</body>
+</html>

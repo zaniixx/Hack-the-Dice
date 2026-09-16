@@ -1,0 +1,29 @@
+/* Element defaults and the app shell. */
+
+* { box-sizing:border-box; }
+html,body {
+  margin:0;
+  height:100%;
+}
+body {
+  background:var(--case);
+  color:var(--case-ink);
+  font-family:var(--vt);
+  font-size:20px;
+  line-height:1.1;
+  overflow-x:hidden;
+}
+button {
+  font:inherit;
+  color:inherit;
+}
+.px { font-family:var(--px); }
+#app {
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  height:100dvh;
+  min-height:660px;
+}
+
+

@@ -1,0 +1,55 @@
+/* Design tokens: palette, fonts, light/dark themes. */
+
+:root {
+  /* Console case — the physical shell around the screens */
+  --case: #bdb6cd;
+  --case-2: #d3cddf;
+  --case-edge: #8c85a2;
+  --case-ink: #1c1730;
+  --case-dim: #58516f;
+
+  /* CRT screens — everything inside a .screen element */
+  --screen: #07060f;
+  --screen-2: #0e0b1c;
+  --screen-line: #241e42;
+  --ink: #dfe6ff;
+  --dim: #7e83ad;
+
+  /* Accents — also used as literal hex values by the sprite painters */
+  --cyan: #3df2ff;
+  --mag: #ff3df0;
+  --lime: #b6ff3d;
+  --amber: #ffc23d;
+  --red: #ff4d6d;
+  --violet: #9a7bff;
+
+  /* Type: --px for chunky headings, --vt for body copy */
+  --px: 'Press Start 2P', ui-monospace, 'Courier New', monospace;
+  --vt: 'VT323', ui-monospace, 'Courier New', monospace;
+
+  color-scheme: light;
+}
+
+/*
+ * Only the case tokens change between themes: the screens are always dark,
+ * because a CRT that glows white would not read as a CRT.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --case: #0a0911;
+    --case-2: #131020;
+    --case-edge: #2b2542;
+    --case-ink: #d6d0ee;
+    --case-dim: #7b7598;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --case: #0a0911;
+  --case-2: #131020;
+  --case-edge: #2b2542;
+  --case-ink: #d6d0ee;
+  --case-dim: #7b7598;
+  color-scheme: dark;
+}

@@ -1,0 +1,202 @@
+/* Floating score effects, toasts, modal, glitch and shake. */
+
+/* fx + modal */
+#fx {
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:50;
+  overflow:hidden;
+}
+.fly {
+  position:absolute;
+  left:0;
+  top:0;
+  font-family:var(--px);
+  font-size:14px;
+  white-space:nowrap;
+  pointer-events:none;
+  text-shadow:2px 2px 0 #000,-1px -1px 0 #000,0 0 10px currentColor;
+  will-change:transform;
+}
+.c-bits { color:var(--cyan); }
+.c-mult { color:var(--mag); }
+.c-x {
+  color:var(--amber);
+  font-size:17px;
+}
+.c-red {
+  color:var(--red);
+  font-size:9px;
+}
+.c-lime {
+  color:var(--lime);
+  font-size:10px;
+}
+.c-dmg {
+  color:#fff;
+  font-size:18px;
+  text-shadow:3px 3px 0 var(--red),0 0 12px var(--red);
+}
+.fly.small { font-size:9px; }
+.bighit {
+  font-size:clamp(28px,5vw,58px);
+  color:#fff;
+  text-shadow:4px 4px 0 var(--mag),-3px -3px 0 var(--cyan),0 0 26px var(--amber);
+}
+.toast {
+  position:absolute;
+  left:50%;
+  bottom:26px;
+  transform:translateX(-50%);
+  background:var(--screen);
+  color:var(--amber);
+  border:2px solid var(--amber);
+  padding:9px 12px;
+  font-family:var(--px);
+  font-size:9px;
+  box-shadow:0 4px 0 #000;
+  animation:toast 2s steps(8) forwards;
+  white-space:nowrap;
+}
+@keyframes toast{0%{opacity:0}8%,82%{opacity:1}100%{opacity:0}}
+#modal {
+  position:fixed;
+  inset:0;
+  z-index:60;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(5,4,12,.8);
+  padding:16px;
+}
+#modal.open { display:flex; }
+.mbox {
+  max-width:580px;
+  width:100%;
+  padding:24px;
+  max-height:92vh;
+  overflow:auto;
+}
+.mbox > * {
+  position:relative;
+  z-index:4;
+}
+.mbtns {
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:18px;
+}
+.mbtns .btn { flex:1; }
+.mtitle {
+  font-family:var(--px);
+  font-size:18px;
+  color:var(--mag);
+  margin:0 0 12px;
+  line-height:1.4;
+}
+.title-big {
+  font-family:var(--px);
+  font-size:clamp(22px,5.5vw,38px);
+  color:#fff;
+  margin:6px 0 10px;
+  line-height:1.3;
+}
+.mbox p {
+  margin:8px 0;
+  font-size:20px;
+  color:var(--ink);
+}
+.mbox p b {
+  color:var(--lime);
+  font-weight:normal;
+}
+.kv {
+  font-size:19px;
+  color:var(--dim);
+  margin:4px 0;
+}
+.kv b {
+  color:var(--lime);
+  font-weight:normal;
+}
+.how {
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  margin:14px 0;
+  font-size:19px;
+  color:var(--ink);
+}
+.how b {
+  font-family:var(--px);
+  font-size:9px;
+  color:var(--cyan);
+  font-weight:normal;
+  margin-right:6px;
+}
+.dim { color:var(--dim)!important; }
+.newbest {
+  font-family:var(--px);
+  color:var(--amber)!important;
+  font-size:11px!important;
+}
+.xfer {
+  height:16px;
+  border:2px solid var(--cyan);
+  margin:14px 0;
+  position:relative;
+  overflow:hidden;
+}
+.xfer i {
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:0;
+  background:repeating-linear-gradient(90deg,var(--cyan) 0 6px,transparent 6px 8px);
+  animation:xfer 1.6s steps(20) forwards;
+}
+@keyframes xfer{to{width:100%}}
+.glitch {
+  position:relative;
+  display:inline-block;
+}
+.glitch::before,.glitch::after {
+  content:attr(data-text);
+  position:absolute;
+  left:0;
+  top:0;
+  width:100%;
+  overflow:hidden;
+  pointer-events:none;
+}
+.glitch::before {
+  color:var(--cyan);
+  transform:translate(-3px,0);
+  clip-path:inset(0 0 62% 0);
+  animation:gl1 2.4s steps(1) infinite;
+}
+.glitch::after {
+  color:var(--mag);
+  transform:translate(3px,0);
+  clip-path:inset(58% 0 0 0);
+  animation:gl2 1.9s steps(1) infinite;
+}
+@keyframes gl1{0%,100%{clip-path:inset(0 0 62% 0)}30%{clip-path:inset(20% 0 40% 0);transform:translate(4px,-1px)}60%{clip-path:inset(70% 0 5% 0)}}
+@keyframes gl2{0%,100%{clip-path:inset(58% 0 0 0)}40%{clip-path:inset(10% 0 70% 0);transform:translate(-4px,1px)}75%{clip-path:inset(40% 0 30% 0)}}
+.shake { animation:shake .35s steps(6); }
+@keyframes shake{20%{transform:translate(-6px,3px)}40%{transform:translate(5px,-4px)}60%{transform:translate(-4px,-2px)}80%{transform:translate(3px,4px)}100%{transform:none}}
+body.alarm::before {
+  content:'';
+  position:fixed;
+  inset:0;
+  background:rgba(255,40,80,.28);
+  z-index:45;
+  pointer-events:none;
+  animation:alarm 1.2s steps(2,jump-none) forwards;
+}
+@keyframes alarm{0%,50%{opacity:1}25%,75%{opacity:0}100%{opacity:0}}
+
+

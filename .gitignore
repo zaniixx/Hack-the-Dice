@@ -1,0 +1,7 @@
+# Editor and OS noise
+.DS_Store
+.vscode/
+.idea/
+
+# Local static-server logs from the headless test runs
+*.log
