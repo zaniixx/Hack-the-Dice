@@ -11,9 +11,9 @@ import { gamePick, seedRun, restoreRng } from '../core/game-random.js';
 import {
   BOSS_NODE, MIN_DICE, CACHE_SCRAP_BONUS, INTEREST_PER_SCRAP, MAX_INTEREST,
 } from '../data/rules.js';
-import {
-  BOSSES, NODE_NAMES, NODE_SPRITES, SERVER_COLORS, corpName,
-} from '../data/enemies.js';
+import { NODE_SPRITES } from '../data/enemies.js';
+import { BOSSES } from '../data/bosses.js';
+import { corpFor, corpName, serverColor } from '../data/corps.js';
 import { difficultyOf } from '../data/difficulty.js';
 import { ABILITIES, isKnownAbility } from '../data/abilities.js';
 import { isKnownArtifact, artifactsStackingOn } from '../data/artifacts.js';
@@ -32,6 +32,8 @@ import { updateUI, resetScoreboard, setEnemyOverlay } from '../ui/hud.js';
 import { hideModal } from '../ui/modal.js';
 import { showMenuScreen, showMigrationScreen, showTracedScreen } from '../ui/screens.js';
 import { openStartScreen, rememberResult } from '../ui/start-screen.js';
+import { maybeStartTutorial, startTutorial } from '../ui/tutorial.js';
+import { showBossCutscene } from '../ui/cutscene.js';
 import { run, Phase, createRun, hasArtifact, isBusy } from './state.js';
 import { saveRun, loadSavedRun, clearSavedRun, loadBest, recordBest } from './save.js';
 import { openShop, generateShop } from './shop.js';
@@ -40,6 +42,8 @@ import { startLiveRun, publish as publishLiveRun, stopLiveRun } from './live-run
 import { firewallHP, executesPerNode } from './difficulty.js';
 import { bossForNode, setActiveTournament, decodeTournament } from './tournament.js';
 import { submitRun } from './leaderboard.js';
+import { bossOnNodeStart } from './boss-rules.js';
+import { corpSays, corpLine } from './voice.js';
 import { runScore } from './score.js';
 
 /** Grow every artifact that counts this kind of event. */
@@ -60,12 +64,12 @@ function createEnemy() {
   const max = firewallHP(run.server, run.node);
 
   return {
-    name: bossKey ? BOSSES[bossKey].name : gamePick(NODE_NAMES),
+    name: bossKey ? BOSSES[bossKey].name : gamePick(corpFor(run.server).nodes),
     hp: max,
     max,
     boss: bossKey,
     sprite: bossKey ? BOSSES[bossKey].sprite : gamePick(NODE_SPRITES),
-    color: SERVER_COLORS[(run.server - 1) % SERVER_COLORS.length],
+    color: serverColor(run.server),
   };
 }
 
@@ -96,9 +100,14 @@ export function beginNode() {
   if (enemy.boss) {
     log(`> !! security protocol online: ${enemy.name}`, 'red');
     log(`> ${BOSSES[enemy.boss].rule}`, 'red');
-    sfx.alarm();
+    showBossCutscene({ boss: BOSSES[enemy.boss], enemy, server: run.server });
   }
   log(`> firewall integrity ${fmt(enemy.max)} — ${run.executes} executes before trace`, 'cyan');
+
+  // The protocol sets its own terms before anyone rolls.
+  bossOnNodeStart();
+  // A corp introduces itself once per server, not once per node.
+  if (run.node === 1) corpSays('greet');
 
   saveRun();
   publishLiveRun(); // the lobby sees the runner arrive at the node
@@ -134,6 +143,7 @@ export async function breachNode() {
 
   const wasBoss = !!run.enemy.boss;
   log(`> ${run.enemy.name} breached`, 'lime');
+  corpSays('breach');
 
   const reward = breachReward(wasBoss);
   const interest = Math.min(MAX_INTEREST, Math.floor(run.scrap / INTEREST_PER_SCRAP));
@@ -167,6 +177,9 @@ export async function breachNode() {
 /** A boss fell: move the run up to the next, harder server. */
 function migrateServer() {
   const previousCorp = corpName(run.server);
+  const partingShot = corpLine('owned', run.server);
+  corpSays('owned');
+
   run.server++;
   run.node = 1;
   advanceStacks('migration');
@@ -183,6 +196,7 @@ function migrateServer() {
 
   showMigrationScreen({
     fromCorp: previousCorp,
+    partingShot,
     server: run.server,
     onContinue: () => log(`> migration complete: ${corpName(run.server)} online`, 'mag'),
   });
@@ -199,10 +213,12 @@ export async function traced() {
 
   const isBest = recordBest();
   clearSavedRun();
+  const partingShot = corpLine('traced', run.server);
+  corpSays('traced');
   const result = await bankRun('traced');
 
   // Let the alarm play before the verdict.
-  setTimeout(() => showRunOver({ ...result, isBest }), 1100);
+  setTimeout(() => showRunOver({ ...result, isBest, partingShot }), 1100);
 }
 
 /**
@@ -220,8 +236,9 @@ async function bankRun(reason) {
 }
 
 /** The run-over screen, with where the score placed. */
-function showRunOver({ entry, rank, tournamentRank, isBest = false }) {
+function showRunOver({ entry, rank, tournamentRank, isBest = false, partingShot = '' }) {
   showTracedScreen({
+    partingShot,
     server: run.server,
     node: run.node,
     stats: run.stats,
@@ -280,6 +297,7 @@ export function startNewRun({ handle, difficulty, tournament = null, seed = '' }
   log('> tip: lock high dice, reroll low ones, then execute.', 'dim');
   beginNode();
   startLiveRun();
+  maybeStartTutorial(); // only for someone who has not seen it
 }
 
 /**
@@ -344,12 +362,13 @@ export function showTitle(view, tournamentId = null) {
   });
 }
 
-/** The in-game menu: the rules, and a way out of a run. */
+/** The in-game menu: the rules, a replay of the tutorial, and a way out. */
 export function openMenu() {
   const busy = isBusy();
   showMenuScreen({
     busy,
     canRestart: !busy && run.phase !== Phase.TITLE,
     onRestart: abandonRun,
+    onTutorial: startTutorial,
   });
 }

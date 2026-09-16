@@ -112,6 +112,23 @@
   color:var(--lime);
   font-weight:normal;
 }
+
+/* A parting line from the corporation, on the screens that end something. */
+.mbox p.said {
+  color:var(--violet);
+  font-style:italic;
+  border-left:2px solid var(--violet);
+  padding-left:10px;
+  margin:14px 0;
+}
+.mbox p.said span {
+  display:block;
+  font-style:normal;
+  font-family:var(--px);
+  font-size:8px;
+  color:var(--dim);
+  margin-top:6px;
+}
 .kv {
   font-size:19px;
   color:var(--dim);

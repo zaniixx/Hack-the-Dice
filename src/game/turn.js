@@ -5,7 +5,6 @@
  * game/execute.js takes over.
  */
 import { ABILITIES } from '../data/abilities.js';
-import { gamePick } from '../core/game-random.js';
 import { rerollsPerRoll } from './difficulty.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
@@ -14,6 +13,7 @@ import { log } from '../ui/log.js';
 import { toast } from '../ui/fx.js';
 import { updateUI, resetScoreboard, showScorePreview } from '../ui/hud.js';
 import { run, Phase } from './state.js';
+import { bossOnSettled } from './boss-rules.js';
 import { applyScoringValues, eligibleDice, comboTags } from './scoring.js';
 
 /** Throw the whole pool. Every roll starts a fresh set of rerolls. */
@@ -62,12 +62,9 @@ export function onDiceSettled() {
   if (run.phase !== Phase.ROLLING) return;
   run.phase = Phase.MANIP;
 
-  if (run.enemy.boss === 'antivirus' && dice.length) {
-    const victim = gamePick(dice);
-    victim.quarantined = true;
-    log(`> antivirus quarantined a die showing ${victim.value}`, 'red');
-    sfx.buzz();
-  }
+  // Whatever the boss does to a fresh roll, it does it here — including the
+  // sound it makes doing it.
+  bossOnSettled();
 
   updateUI();
   refreshPreview();

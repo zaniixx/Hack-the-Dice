@@ -83,6 +83,9 @@ const { loadSavedRun, saveRun } = await import('../src/game/save.js');
 const { isLeakDraining, tickMemoryLeak } = await import('../src/game/memory-leak.js');
 const board = await import('../src/engine/dice-board.js'); // `dice` is a live binding too
 const { nodeHP } = await import('../src/data/enemies.js');
+const { bossOnNodeStart } = await import('../src/game/boss-rules.js');
+const { isCutsceneOpen, closeCutscene } = await import('../src/ui/cutscene.js');
+const { BOSSES } = await import('../src/data/bosses.js');
 const { els } = await import('../src/ui/dom.js');
 
 /** Skip the tumble: drop the dice where they are and hand control back. */
@@ -170,6 +173,94 @@ try {
   const beforeCipher = state.run.stats.dmg;
   await executePayload();
   check('cipher shield absorbs 90%', state.run.stats.dmg - beforeCipher, Math.floor(15 * 0.1));
+
+  section('The boss cutscene');
+  startNewRun({ handle: 'ANON', difficulty: 'pen-tester', seed: 'CUT-1' });
+  check('an ordinary node has no cutscene', isCutsceneOpen(), false);
+
+  state.run.node = 5;
+  beginNode();
+  check('a protocol introduces itself', isCutsceneOpen(), true);
+  check('it names the boss', els.cutName.textContent, BOSSES[state.run.enemy.boss].name);
+  check('and states the rule it will enforce', els.cutRule.textContent, BOSSES[state.run.enemy.boss].rule);
+  check('it says something of its own', els.cutLine.textContent.length > 0, true);
+
+  closeCutscene();
+  check('and it can be dismissed', isCutsceneOpen(), false);
+
+  section('The other boss protocols');
+
+  // RATE LIMITER: only the best three dice are allowed to score.
+  state.run.enemy.boss = 'throttle';
+  state.run.enemy.hp = state.run.enemy.max = 1e6;
+  state.run.executes = state.run.maxExecutes = 4;
+  state.run.phase = 'ready';
+  rollDice();
+  settle();
+  setFaces([6, 5, 4, 3, 2]);
+  refreshPreview();
+  check('rate limiter scores only the best three', els.bits.textContent, '15');
+
+  // PROXY WRAITH: rebuilds its firewall after every execute.
+  state.run.enemy.boss = 'wraith';
+  state.run.enemy.hp = 500000;
+  const beforeRegen = state.run.enemy.hp;
+  setFaces([1, 1, 1, 1, 1]); // a scratch, so the regen is what moves the bar
+  await executePayload();
+  check('proxy wraith rebuilds its firewall', state.run.enemy.hp > beforeRegen, true);
+
+  // RANSOMWARE VAULT: pays out of your scrap, or hardens.
+  state.run.enemy.boss = 'ransomware';
+  state.run.enemy.hp = state.run.enemy.max = 1e6;
+  state.run.scrap = 10;
+  state.run.executes = state.run.maxExecutes = 4;
+  state.run.phase = 'ready';
+  rollDice();
+  settle();
+  setFaces([5, 5, 5, 5, 5]);
+  const beforePaid = state.run.stats.dmg;
+  await executePayload();
+  check('ransomware takes its fee', state.run.scrap, 7);
+  check('a paid execute lands in full', state.run.stats.dmg - beforePaid, 25);
+
+  state.run.scrap = 0;
+  state.run.phase = 'ready';
+  rollDice();
+  settle();
+  setFaces([5, 5, 5, 5, 5]);
+  const beforeUnpaid = state.run.stats.dmg;
+  await executePayload();
+  check('an unpaid execute is halved', state.run.stats.dmg - beforeUnpaid, 12);
+
+  // SANDBOX: no charges on this node.
+  state.run.abilities = ['bitshift'];
+  state.run.charges = { bitshift: 1 };
+  state.run.enemy.boss = 'sandbox';
+  bossOnNodeStart();
+  check('sandbox contains your abilities', state.run.charges.bitshift, 0);
+
+  // REVENANT: refuses the first killing blow.
+  state.run.enemy.boss = 'revenant';
+  state.run.enemy.max = 1000;
+  state.run.enemy.hp = 1;
+  state.run.enemy.restored = false;
+  state.run.executes = state.run.maxExecutes = 4;
+  state.run.phase = 'ready';
+  rollDice();
+  settle();
+  await executePayload();
+  check('revenant refuses the first breach', state.run.enemy.hp, 400);
+  check('and the node carries on', state.run.phase, 'ready');
+
+  state.run.enemy.hp = 1;
+  rollDice();
+  settle();
+  await executePayload();
+  check('the second time it stays down', state.run.phase, 'shop');
+
+  // Leave a clean, live node for the section that follows.
+  startNewRun({ handle: 'ANON', difficulty: 'pen-tester' });
+  state.run.enemy.hp = state.run.enemy.max = 1e6;
 
   section('Losing, and moving up');
   state.run.executes = 1;
@@ -261,7 +352,8 @@ try {
   say(failures ? `${failures} FAILURE(S)` : 'ALL CHECKS PASSED',
     (failures ? 'fail' : 'pass') + ' total');
 } catch (error) {
-  say(`THREW: ${(error && error.stack) || error}`, 'fail');
+  // Firefox leaves the message out of .stack, so print both.
+  say(`THREW: ${error && error.message ? error.message + ' — ' : ''}${(error && error.stack) || error}`, 'fail');
 } finally {
   restoreStorage();
   if (ping) await Promise.all(sent);

@@ -169,9 +169,9 @@ function drawQuarantineMark(x, y) {
  *
  * @param {number} dt seconds since the last frame, real time
  * @param {object} options
- * @param {?number} options.absorbBelow  mark dice scoring this or less as doomed
+ * @param {?Function} options.isDoomed  marks dice the boss will not let score
  */
-export function drawBoard(dt, { absorbBelow = null } = {}) {
+export function drawBoard(dt, { isDoomed = null } = {}) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(backgroundCanvas, 0, 0);
@@ -213,7 +213,7 @@ export function drawBoard(dt, { absorbBelow = null } = {}) {
 
     if (die.quarantined) {
       drawQuarantineMark(die.x, screenY);
-    } else if (absorbBelow !== null && die.scoringValue <= absorbBelow) {
+    } else if (isDoomed && isDoomed(die)) {
       ctx.fillStyle = '#ff4d6d';
       ctx.fillRect(Math.round(die.x - 6), Math.round(screenY + 11), 13, 2);
     }

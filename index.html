@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07060f">
+<!-- Added to a home screen, these give a real full-screen game with no browser chrome. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hack the Dice">
 <title>Hack the Dice</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -10,6 +16,41 @@
 
 <!-- Stylesheets are loaded in cascade order: tokens and base first, then one
      file per region of the console, then effects and responsive overrides. -->
+<script>
+/*
+ * Fail loudly. A module that will not load would otherwise leave a black
+ * screen with nothing to go on, which is the worst thing that can happen in
+ * front of a judge. Anything thrown before the game finishes booting is shown
+ * here; once it is running, errors go to the console as usual.
+ */
+(function () {
+  function report(message) {
+    if (window.__htdBooted) return;
+    var box = document.getElementById('bootError');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'bootError';
+      box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#0b0a14;color:#ff4d6d;' +
+        'font:14px/1.6 ui-monospace,monospace;padding:26px;overflow:auto;white-space:pre-wrap';
+      box.textContent = 'HACK THE DICE did not start.\n\n' +
+        'If you just updated the game, hard-refresh (ctrl-shift-R): a half-cached\n' +
+        'set of modules is the usual cause. Serving with tools/serve.py avoids it.\n\n';
+      (document.body || document.documentElement).appendChild(box);
+    }
+    box.textContent += message + '\n';
+  }
+  addEventListener('error', function (event) {
+    if (event.target && event.target.tagName === 'SCRIPT') {
+      report('could not load ' + (event.target.src || 'a script'));
+    } else {
+      report(event.message || String(event.error));
+    }
+  }, true);
+  addEventListener('unhandledrejection', function (event) {
+    report(String((event.reason && event.reason.message) || event.reason));
+  });
+})();
+</script>
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/base.css">
 <link rel="stylesheet" href="src/styles/layout.css">
@@ -20,6 +61,9 @@
 <link rel="stylesheet" href="src/styles/effects.css">
 <link rel="stylesheet" href="src/styles/arcade.css">
 <link rel="stylesheet" href="src/styles/responsive.css">
+<link rel="stylesheet" href="src/styles/cutscene.css">
+<link rel="stylesheet" href="src/styles/tutorial.css">
+<link rel="stylesheet" href="src/styles/mobile.css">
 </head>
 <body>
 <div id="app">
@@ -34,6 +78,9 @@
     <div class="stat" id="tOpWrap" hidden><small>Tournament</small><span id="tOp"></span></div>
     <div class="spacer"></div>
     <div class="topbtns">
+      <button class="btn sm touch-only" id="btnRig" title="Black market and rig">RIG</button>
+      <button class="btn sm touch-only" id="btnLog" title="Console log">LOG</button>
+      <button class="btn sm touch-only" id="btnFull" title="Full screen">FULL</button>
       <button class="btn sm" id="btnSpeed" title="Animation speed">SPD 1×</button>
       <button class="btn sm" id="btnSound" title="Toggle sound">SND ON</button>
       <button class="btn sm" id="btnMenu">MENU</button>
@@ -52,7 +99,10 @@
         </div>
         <div class="bossrule" id="bossRule"></div>
       </div>
-      <div class="screen logbox"><div class="log" id="log" aria-live="polite"></div></div>
+      <div class="screen logbox">
+        <div class="log" id="log" aria-live="polite"></div>
+        <button class="btn sm sheet-close touch-only" data-close-sheet>CLOSE</button>
+      </div>
     </section>
 
     <section class="panel center" aria-label="Board">
@@ -84,7 +134,10 @@
     </section>
 
     <section class="panel right" aria-label="Toolkit">
-      <div class="ptitle"><span>TOOLKIT</span><span class="tag">Black market + rig</span></div>
+      <div class="ptitle">
+        <span>TOOLKIT</span><span class="tag">Black market + rig</span>
+        <button class="btn sm sheet-close touch-only" data-close-sheet>CLOSE</button>
+      </div>
       <div class="screen toolkit" id="toolkit">
         <div class="sec-h">BLACK MARKET <button class="btn sm" id="btnShopReroll">REFRESH</button></div>
         <div class="shop" id="shop"></div>
@@ -99,6 +152,28 @@
     </section>
   </main>
 </div>
+<div id="cutscene" class="cutscene" hidden>
+  <div class="cut-panel">
+    <span class="cut-label" id="cutLabel"></span>
+    <canvas class="cut-sprite" id="cutSprite" width="64" height="48"></canvas>
+    <h2 class="cut-name" id="cutName" data-text=""></h2>
+    <p class="cut-rule" id="cutRule"></p>
+    <p class="cut-line" id="cutLine"></p>
+    <span class="cut-go">PRESS ANY KEY TO ENGAGE</span>
+  </div>
+</div>
+<div id="coach" class="coach" hidden>
+  <div class="coach-ring" id="coachRing"></div>
+  <div class="coach-note" id="coachNote">
+    <b id="coachTitle"></b>
+    <p id="coachText"></p>
+    <div class="coach-actions">
+      <span class="coach-step" id="coachStep"></span>
+      <button class="btn sm" id="coachSkip">SKIP TUTORIAL</button>
+    </div>
+  </div>
+</div>
+<div id="sheetBackdrop" class="sheet-backdrop" hidden></div>
 <div id="start" class="start-screen" hidden></div>
 <div id="fx"></div>
 <div id="modal" role="dialog" aria-modal="true"></div>

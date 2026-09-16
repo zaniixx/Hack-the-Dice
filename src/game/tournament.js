@@ -11,7 +11,7 @@
  * What does not travel on its own is the board. With the browser-local store,
  * scores are kept per device; see services/local-store.js.
  */
-import { BOSS_ORDER, BOSSES, bossForServer } from '../data/enemies.js';
+import { BOSS_ORDER, BOSSES, bossForServer } from '../data/bosses.js';
 import { DICE } from '../data/dice.js';
 import { ARTIFACTS } from '../data/artifacts.js';
 import { ABILITIES } from '../data/abilities.js';
@@ -50,7 +50,7 @@ const BAN_LISTS = {
  * change stop decoding: bump CODE_VERSION when that happens.
  */
 const CODE_PREFIX = 'HTD-';
-const CODE_VERSION = 1;
+const CODE_VERSION = 2;
 const ID_LENGTH = 5;
 
 /** 38 symbols for names and seeds: 6 bits each, all QR-alphanumeric safe. */

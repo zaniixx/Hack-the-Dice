@@ -1,0 +1,278 @@
+/*
+ * Touch layout: the game fills the screen and behaves like an app.
+ *
+ * Three things make it feel native rather than like a web page: the shell is
+ * pinned to the viewport so nothing scrolls or rubber-bands, zoom is off so a
+ * mistimed double tap cannot wreck the board, and the two panels that are not
+ * needed moment to moment — the console log and the toolkit — become sheets
+ * that slide up over the game instead of stretching the page.
+ *
+ * It applies to anything narrower than the desktop layout, and to any device
+ * driven by a finger regardless of size.
+ */
+
+@media (max-width: 1120px), (pointer: coarse) {
+
+  /* ---- Shell ------------------------------------------------------------- */
+
+  html, body {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    /* No pull-to-refresh, no rubber-band at the edges. */
+    overscroll-behavior: none;
+    /* No double-tap zoom; taps stay instant. */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /*
+   * --app-height is set from the real viewport height in JS, because a phone's
+   * 100vh includes browser chrome that is not actually there.
+   */
+  #app {
+    height: var(--app-height, 100dvh);
+    min-height: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .touch-only { display: inline-flex; }
+
+  /* ---- Top bar: values without labels, in one compact strip --------------- */
+
+  .topbar {
+    gap: 8px 12px;
+    padding: 5px 8px;
+    align-items: center;
+  }
+
+  .logo { font-size: 10px; }
+  .logo b { margin: 0 .3em; }
+
+  .stat { flex-direction: row; align-items: baseline; gap: 5px; }
+  .stat small { display: none; }
+  .stat span { font-size: 9px; }
+  .stat em { font-size: 13px; }
+
+  .topbtns { gap: 4px; margin-left: auto; }
+  .btn.sm { font-size: 7px; padding: 8px 7px; }
+
+  /* ---- The grid becomes target strip over board -------------------------- */
+
+  .grid {
+    gap: 6px;
+    padding: 6px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .panel { padding: 6px; gap: 6px; }
+  .panel.left, .panel.center { height: auto; min-height: 0; }
+  .panel.left .ptitle { display: none; }
+
+  /* The target reads as one strip: portrait, name, firewall, boss rule. */
+  .target {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    grid-template-areas:
+      "art name"
+      "art fw"
+      "rule rule";
+    align-items: center;
+    gap: 4px 8px;
+    padding: 6px;
+  }
+
+  .ename { grid-area: name; font-size: 8px; }
+  .ecan-wrap { grid-area: art; }
+  .fw { grid-area: fw; }
+  .bossrule { grid-area: rule; font-size: 15px; padding: 4px 6px; }
+  #enemy { max-height: 74px; }
+  .fw-top { font-size: 7px; margin-bottom: 3px; }
+  .fw-bar { height: 14px; }
+
+  /* ---- Board: everything else gives it room ------------------------------ */
+
+  .board-wrap { flex: 1 1 0; height: auto; min-height: 140px; }
+
+  /* The board owns every touch that lands on it: no scroll, no callout. */
+  #board {
+    touch-action: none;
+    -webkit-touch-callout: none;
+  }
+  .hint { font-size: 15px; bottom: 4px; }
+  .combo { font-size: 7px; }
+
+  /* Artifacts are icons only at this width; the rig sheet lists them in full. */
+  .arts { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .art { min-height: 38px; padding: 2px; }
+  .art img { width: 22px; height: 22px; }
+  .art span { display: none; }
+  .art.empty { font-size: 6px; }
+
+  .scorebar { padding: 5px; gap: 5px; }
+  .sbox { padding: 4px 2px; }
+  .sbox .lbl { font-size: 6px; margin-bottom: 3px; }
+  .sbox .val { font-size: clamp(13px, 4vw, 18px); }
+  .op { font-size: 10px; }
+
+  /* Controls sit where thumbs are, with targets big enough to hit. */
+  .controls { gap: 6px; }
+  .meters { gap: 14px; font-size: 15px; }
+  .btnrow { gap: 6px; }
+  .btnrow .btn { padding: 15px 4px; font-size: 10px; }
+  .abils { gap: 6px; }
+  .abil { min-height: 46px; padding: 5px; }
+  .abil .an { font-size: 6px; }
+
+  /* ---- Sheets: the log and the toolkit slide up over the game ------------- */
+
+  .panel.right,
+  .logbox {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 56;
+    height: auto;
+    max-height: min(70dvh, 560px);
+    margin: 0;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    border: 2px solid var(--cyan);
+    box-shadow: 0 -6px 0 rgba(0, 0, 0, .5);
+    transform: translateY(101%);
+    transition: transform .22s steps(4);
+    will-change: transform;
+  }
+
+  .panel.right { background: var(--case-2); }
+  .logbox { background: var(--screen); min-height: 44dvh; }
+
+  body.sheet-rig .panel.right,
+  body.sheet-log .logbox { transform: none; }
+
+  .toolkit { overflow-y: auto; overscroll-behavior: contain; }
+  .log { inset: 34px 10px 8px; overscroll-behavior: contain; }
+
+  .sheet-close {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 6;
+  }
+
+  .panel.right .ptitle { padding-right: 70px; }
+
+  .sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(5, 4, 12, .66);
+  }
+
+  /* ---- Start screen: scrolls inside itself, never the page --------------- */
+
+  .start-screen {
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 12px
+             calc(24px + env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .start-cols { grid-template-columns: minmax(0, 1fr); }
+  .start-actions .btn { flex: 1 1 140px; }
+  .field input, .field textarea { font-size: 16px; } /* 16px: iOS will not zoom the field */
+  #modal { padding: 12px; }
+  .mbox { padding: 16px; }
+}
+
+/* ---- Phones in landscape: put the board beside the controls -------------- */
+
+@media (max-height: 560px) and (orientation: landscape) {
+  .grid {
+    grid-template-columns: minmax(150px, 0.8fr) minmax(0, 2fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .panel.left { grid-row: 1; }
+
+  /* Stack the target strip again: there is height for it, but not width. */
+  .target {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "art" "name" "fw" "rule";
+    align-items: stretch;
+  }
+
+  #enemy { max-height: 84px; }
+  .arts { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .art { min-height: 30px; }
+  .art img { width: 18px; height: 18px; }
+  .board-wrap { min-height: 90px; }
+  .btnrow .btn { padding: 10px 4px; }
+  .abil { min-height: 36px; }
+  .topbar { padding: 3px 8px; }
+}
+
+/*
+ * Phones: the start screen has to fit as well.
+ *
+ * The threat level cards lose their flavour line here — the name, the colour
+ * and the numbers are what a player picks on, and losing the prose is what
+ * keeps JACK IN above the fold on a phone.
+ */
+@media (max-width: 560px) {
+  .start-inner { gap: 12px; }
+  .start-logo { font-size: clamp(20px, 7.5vw, 30px); }
+  .start-sub { display: none; }
+  .start-card { padding: 10px; gap: 8px; }
+  .sec { font-size: 9px; padding-bottom: 6px; }
+  .field > span { font-size: 6px; line-height: 1.5; }
+  .field input, .field textarea { padding: 9px 8px; }
+
+  .tier-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tier-card { padding: 8px; gap: 5px; }
+  .tier-tagline { display: none; }
+  .tier-name { font-size: 9px; }
+  .tier-rank { font-size: 8px; }
+  .tier-stats { font-size: 14px; gap: 2px 8px; }
+
+  .start-actions { gap: 8px; }
+  .btn.big { font-size: 12px; padding: 14px 18px; }
+  .start-foot { font-size: 14px; }
+  .kv, .lede { font-size: 16px; }
+  .how { font-size: 16px; gap: 5px; }
+  .how b { font-size: 8px; }
+
+  .panel-head h2 { font-size: 12px; }
+  .op-code { font-size: clamp(20px, 9vw, 34px); letter-spacing: 4px; }
+  .board { font-size: 15px; }
+  .board th { font-size: 6px; padding: 6px 6px; }
+  .board td { padding: 6px; }
+  .board .rank, .board .score { font-size: 9px; }
+  .board .who { font-size: 8px; }
+}
+
+/*
+ * Short screens: the start screen gives up everything that is not a decision.
+ *
+ * Only the tier being considered shows its numbers; the other three are a name
+ * and a colour, which is all that is needed to choose between them.
+ */
+@media (max-height: 700px) {
+  .start-inner { gap: 10px; }
+  .start-logo { font-size: clamp(18px, 6vw, 26px); }
+  .start-foot { display: none; }
+  .start-card { gap: 6px; }
+  .tier-card { gap: 4px; padding: 7px; }
+  .tier-card:not(.on) .tier-stats { display: none; }
+  .btn.big { padding: 12px 16px; }
+  .how { display: none; }
+  .start-actions .btn { padding: 11px 10px; }
+}

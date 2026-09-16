@@ -1,48 +1,7 @@
-/* Reduced motion and narrow-viewport layouts. */
+/* Motion preferences. The narrow and touch layouts live in mobile.css. */
 
 @media (prefers-reduced-motion: reduce) {
   .shake,.glitch::before,.glitch::after,.btn.pulse:not(:disabled),body.alarm::before {
     animation:none!important;
   }
 }
-@media (max-width:1120px) {
-  #app {
-    height:auto;
-    min-height:100vh;
-  }
-  .grid {
-    grid-template-columns:minmax(230px,1fr) minmax(340px,1.9fr);
-    grid-template-rows:auto auto;
-  }
-  .left,.center {
-    height:min(780px,calc(100vh - 90px));
-    min-height:600px;
-  }
-  .right { grid-column:1 / -1; }
-  .toolkit { overflow:visible; }
-}
-@media (max-width:760px) {
-  .grid { grid-template-columns:minmax(0,1fr); }
-  .left,.center {
-    height:auto;
-    min-height:0;
-  }
-  .right { grid-column:auto; }
-  .board-wrap {
-    flex:none;
-    height:320px;
-  }
-  .logbox {
-    flex:none;
-    height:150px;
-  }
-  #enemy { max-height:200px; }
-  .arts { grid-template-columns:repeat(3,minmax(0,1fr)); }
-  .topbar { gap:12px; }
-  .btnrow .btn {
-    padding:12px 4px;
-    font-size:9px;
-  }
-  .abil .an { font-size:6px; }
-}
-

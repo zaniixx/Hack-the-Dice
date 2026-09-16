@@ -4,7 +4,7 @@
  * The host form keeps its draft here, because it is a form: it has to survive
  * the re-renders that toggling a ban causes.
  */
-import { BOSSES, BOSS_ORDER } from '../data/enemies.js';
+import { BOSSES, BOSS_ORDER } from '../data/bosses.js';
 import { DICE } from '../data/dice.js';
 import { ARTIFACTS } from '../data/artifacts.js';
 import { ABILITIES } from '../data/abilities.js';

@@ -9,27 +9,42 @@
  */
 import { settings } from '../core/settings.js';
 
-const MASTER_VOLUME = 0.5;
+const MASTER_VOLUME = 0.95;
+/** Music sits under the sound effects, never over them. */
+const MUSIC_VOLUME = 0.30;
 /** Near-silence: gain ramps must stay above zero to be exponential. */
 const SILENT = 0.0001;
 
 let context = null;
 let master = null;
+let music = null;
 let noiseBuffer = null;
 const lastPlayed = {};
 
-export function initAudio() {
-  if (context) {
+/**
+ * Start the audio graph.
+ *
+ * Pass a context to build the graph on that instead of a live one — an
+ * OfflineAudioContext, say, which is how tools/audio-test.html renders the
+ * music and measures it without needing a sound card.
+ */
+export function initAudio(customContext = null) {
+  if (context && !customContext) {
     if (context.state === 'suspended') context.resume();
     return;
   }
   try {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
-    context = new AudioCtor();
+    context = customContext || new AudioCtor();
 
     master = context.createGain();
     master.gain.value = settings.muted ? 0 : MASTER_VOLUME;
     master.connect(context.destination);
+
+    // A separate bus, so the soundtrack can be quiet without muffling the game.
+    music = context.createGain();
+    music.gain.value = settings.muted ? 0 : MUSIC_VOLUME;
+    music.connect(context.destination);
 
     // One second of white noise, reused by every percussive sound.
     const length = context.sampleRate;
@@ -43,7 +58,20 @@ export function initAudio() {
 
 export function setMuted(muted) {
   if (master) master.gain.value = muted ? 0 : MASTER_VOLUME;
+  if (music) music.gain.value = muted ? 0 : MUSIC_VOLUME;
 }
+
+/** True once the context exists and sound would actually be heard. */
+export const audioReady = () => !!context && !settings.muted;
+
+/** The audio clock, for scheduling a sequence ahead of time. */
+export const audioTime = () => (context ? context.currentTime : 0);
+
+/** The context itself, for offline rendering in tests. */
+export const audioContext = () => context;
+
+/** Which bus a voice plays on. */
+const busFor = bus => (bus === 'music' ? music : master);
 
 /** True when a sound would actually be heard. */
 function audible() {
@@ -71,8 +99,9 @@ export function throttled(key, ms) {
  * @param {number} vol    peak gain
  * @param {number} slide  Hz to bend towards over the note's life
  * @param {number} delay  seconds to wait before playing
+ * @param {string} bus    'sfx' (default) or 'music'
  */
-export function tone(freq, dur, type = 'square', vol = 0.15, slide = 0, delay = 0) {
+export function tone(freq, dur, type = 'square', vol = 0.15, slide = 0, delay = 0, bus = 'sfx') {
   if (!audible()) return;
   const start = context.currentTime + delay;
 
@@ -89,7 +118,7 @@ export function tone(freq, dur, type = 'square', vol = 0.15, slide = 0, delay = 
   gain.gain.exponentialRampToValueAtTime(SILENT, start + dur);
 
   osc.connect(gain);
-  gain.connect(master);
+  gain.connect(busFor(bus));
   osc.start(start);
   osc.stop(start + dur + 0.03);
 }
@@ -102,8 +131,9 @@ export function tone(freq, dur, type = 'square', vol = 0.15, slide = 0, delay = 
  * @param {number} freq   filter cutoff or center in Hz
  * @param {number} delay  seconds to wait before playing
  * @param {string} type   biquad filter type
+ * @param {string} bus    'sfx' (default) or 'music'
  */
-export function noise(dur, vol = 0.2, freq = 2000, delay = 0, type = 'lowpass') {
+export function noise(dur, vol = 0.2, freq = 2000, delay = 0, type = 'lowpass', bus = 'sfx') {
   if (!audible()) return;
   const start = context.currentTime + delay;
 
@@ -121,7 +151,7 @@ export function noise(dur, vol = 0.2, freq = 2000, delay = 0, type = 'lowpass') 
 
   source.connect(filter);
   filter.connect(gain);
-  gain.connect(master);
+  gain.connect(busFor(bus));
   source.start(start, Math.random() * 0.5); // random offset: no audible loop
   source.stop(start + dur + 0.03);
 }

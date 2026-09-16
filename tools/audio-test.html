@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hack the Dice — audio test</title>
+<style>
+  body { background:#0b0a14; color:#dfe6ff; font:13px/1.6 ui-monospace, monospace; padding:14px; }
+  h1 { font-size:14px; color:#3df2ff; margin:0 0 8px; }
+  .pass { color:#b6ff3d; } .fail { color:#ff4d6d; font-weight:bold; }
+  canvas { display:block; margin:10px 0; background:#07060f; border:1px solid #241e42; }
+</style>
+</head>
+<body>
+<h1>Hack the Dice — audio test</h1>
+<div id="out">rendering…</div>
+
+<script type="module">
+/*
+ * Renders the music and the sound effects into an OfflineAudioContext and
+ * measures them.
+ *
+ * A browser without a sound card — a headless one, for instance — never starts
+ * its audio clock, so a live check can only ever prove that nothing crashed.
+ * Rendering offline produces real samples, which is the only way to answer the
+ * questions that matter: is anything actually coming out, and is the music
+ * sitting under the effects rather than over them?
+ *
+ * Append ?ping to mirror the result to the server log.
+ */
+import { initAudio, setMuted } from '../src/audio/synth.js';
+import { sfx } from '../src/audio/sfx.js';
+import { setMood, renderBars, MOOD_NAMES } from '../src/audio/music.js';
+
+const out = document.getElementById('out');
+const ping = location.search.includes('ping');
+const sent = [];
+let failures = 0;
+function say(text, cls) {
+  out.insertAdjacentHTML('beforeend', `<div class="${cls}">${text}</div>`);
+  if (ping) sent.push(fetch('/__t/' + encodeURIComponent(text)).catch(() => {}));
+}
+function check(name, ok, detail = '') {
+  if (!ok) failures++;
+  say(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`, ok ? 'pass' : 'fail');
+}
+
+const SR = 44100;
+
+/** Render something into a fresh offline context and measure it. */
+async function render(seconds, build) {
+  const offline = new OfflineAudioContext(1, Math.ceil(SR * seconds), SR);
+  initAudio(offline);
+  setMuted(false);
+  build();
+
+  const buffer = await offline.startRendering();
+  const samples = buffer.getChannelData(0);
+
+  let sum = 0;
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    sum += samples[i] * samples[i];
+    peak = Math.max(peak, Math.abs(samples[i]));
+  }
+  return { rms: Math.sqrt(sum / samples.length), peak, samples };
+}
+
+/** Draw a waveform, so a person can see the shape of what was measured. */
+function plot(samples, label) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 900;
+  canvas.height = 90;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#3df2ff';
+  const stride = Math.floor(samples.length / canvas.width) || 1;
+  for (let x = 0; x < canvas.width; x++) {
+    let peak = 0;
+    for (let i = 0; i < stride; i++) peak = Math.max(peak, Math.abs(samples[x * stride + i] || 0));
+    const height = Math.max(1, peak * canvas.height);
+    ctx.fillRect(x, (canvas.height - height) / 2, 1, height);
+  }
+  say(label, 'pass');
+  out.appendChild(canvas);
+}
+
+out.innerHTML = '';
+
+// ---- The music actually makes sound ----------------------------------------
+const bars = await render(6, () => {
+  setMood('node');
+  renderBars(4, 0.01);
+});
+check('the music is properly audible', bars.peak > 0.2, `rms ${bars.rms.toFixed(4)}, peak ${bars.peak.toFixed(3)}`);
+check('and it is not clipping', bars.peak <= 1.0, `peak ${bars.peak.toFixed(3)}`);
+plot(bars.samples, 'four bars of the node theme:');
+
+// ---- Every mood plays ------------------------------------------------------
+for (const mood of MOOD_NAMES) {
+  const rendered = await render(5, () => {
+    setMood(mood);
+    renderBars(2, 0.01);
+  });
+  check(`${mood} has a pulse`, rendered.rms > 0.008, `rms ${rendered.rms.toFixed(4)}, peak ${rendered.peak.toFixed(3)}`);
+}
+
+// ---- Effects are louder than the bed ---------------------------------------
+const effects = await render(2, () => {
+  sfx.hit();
+  sfx.coin();
+  sfx.bossOnline();
+});
+check('sound effects produce signal', effects.peak > 0.2, `peak ${effects.peak.toFixed(3)}`);
+check('effects sit above the music', effects.peak > bars.peak,
+  `effects ${effects.peak.toFixed(3)} vs music ${bars.peak.toFixed(3)}`);
+
+// ---- Every boss sound is audible -------------------------------------------
+for (const name of ['quarantine', 'absorb', 'throttle', 'regen', 'extort', 'contain', 'restore']) {
+  const one = await render(1.2, () => sfx[name]());
+  check(`${name} is audible`, one.peak > 0.02, `peak ${one.peak.toFixed(3)}`);
+}
+const cipher = await render(1.2, () => sfx.cipher(true));
+check('cipher is audible', cipher.peak > 0.02, `peak ${cipher.peak.toFixed(3)}`);
+
+// ---- Mute means silence ----------------------------------------------------
+const muted = await render(3, () => {
+  setMuted(true);
+  setMood('boss');
+  renderBars(2, 0.01);
+  sfx.hit();
+});
+setMuted(false);
+check('mute silences everything', muted.peak < 0.001, `peak ${muted.peak.toFixed(5)}`);
+
+const summary = failures ? `${failures} FAILURE(S)` : 'AUDIO OK';
+say(summary, failures ? 'fail' : 'pass');
+if (ping) await Promise.all(sent);
+</script>
+</body>
+</html>

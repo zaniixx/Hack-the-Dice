@@ -6,7 +6,7 @@
  * actions their buttons should run, so they never reach into game state.
  */
 import { fmt } from '../core/format.js';
-import { corpName } from '../data/enemies.js';
+import { corpName } from '../data/corps.js';
 import { difficultyOf } from '../data/difficulty.js';
 import { showModal } from './modal.js';
 
@@ -21,8 +21,9 @@ export const HOW_TO_PLAY = `<div class="how">
   <div><b>SCORE</b>Nodes breached, servers owned and scrap harvested, multiplied by your threat level.</div>
 </div>`;
 
-export function showMenuScreen({ busy, canRestart, onRestart }) {
+export function showMenuScreen({ busy, canRestart, onRestart, onTutorial }) {
   const buttons = [{ text: 'CLOSE', cls: 'cyan' }];
+  if (onTutorial && !busy) buttons.push({ text: 'REPLAY TUTORIAL', fn: onTutorial });
   if (canRestart) {
     buttons.push({ text: 'ABANDON RUN — BANKS SCORE', cls: 'mag', fn: onRestart });
   }
@@ -34,9 +35,10 @@ export function showMenuScreen({ busy, canRestart, onRestart }) {
 }
 
 /** Shown after a boss falls, while the run moves up to the next server. */
-export function showMigrationScreen({ fromCorp, server, onContinue }) {
+export function showMigrationScreen({ fromCorp, partingShot = '', server, onContinue }) {
   const extraArtifact = server >= 2 ? ', plus one more artifact offered per visit' : '';
   showModal(`<div class="mtitle glitch" data-text="NETWORK OWNED">NETWORK OWNED</div>
+    ${partingShot ? `<p class="said">“${partingShot}”<span>— ${fromCorp}</span></p>` : ''}
     <p>${fromCorp} is yours. Migrating payload to <b>${corpName(server)}</b>, security tier ${server}.</p>
     <div class="xfer"><i></i></div>
     <div class="kv">Kept: <b>dice pool, abilities, cyberartifacts, data scrap</b></div>
@@ -58,7 +60,7 @@ function placeLine(rank, label) {
  */
 export function showRunOverScreen({
   server, node, stats, isBest, entry, rank, tournamentRank, tournament,
-  onRestart, onLeaderboard,
+  partingShot = '', onRestart, onLeaderboard,
 }) {
   const tier = difficultyOf(entry.difficulty);
   const tournamentLine = tournament
@@ -67,6 +69,7 @@ export function showRunOverScreen({
 
   showModal(`<div class="mtitle glitch" data-text="TRACED">TRACED</div>
     <p>Corporate security locked onto <b>${entry.handle}</b> at <b>${corpName(server)}</b>, node ${node}.</p>
+    ${partingShot ? `<p class="said">“${partingShot}”<span>— ${corpName(server)}</span></p>` : ''}
     <div class="score-slab" style="--tier:${tier.color}">
       <span class="score-label">FINAL SCORE</span>
       <span class="score-value">${fmt(entry.score)}</span>

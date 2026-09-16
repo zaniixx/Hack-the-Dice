@@ -148,6 +148,146 @@ export const ENEMY_SPRITES = {
 
     rect(ctx, Math.floor((time * 30) % 64), 4, 1, 40, 'rgba(255,77,109,.2)');
   },
+
+  /** RATE LIMITER: a pipe pinched by a valve, with a gauge that never rises. */
+  valve(ctx, time, color) {
+    // Pipe.
+    rect(ctx, 0, 19, 64, 12, shade(color, -0.45));
+    rect(ctx, 0, 19, 64, 2, shade(color, 0.2));
+    for (let x = 2; x < 64; x += 8) rect(ctx, x, 23, 4, 4, '#15122c');
+
+    // Valve body, pinching the flow.
+    rect(ctx, 22, 13, 20, 24, color);
+    rect(ctx, 24, 15, 16, 20, '#15122c');
+    rect(ctx, 28, 22, 8, 6, shade(color, -0.2));
+
+    // Wheel on top, turning a notch at a time.
+    const step = Math.floor(time * 2) % 4;
+    disc(ctx, 32, 9, 6, color);
+    disc(ctx, 32, 9, 4, '#15122c');
+    for (let spoke = 0; spoke < 4; spoke++) {
+      const angle = (Math.PI / 2) * (spoke + step / 4);
+      rect(ctx, Math.round(32 + Math.cos(angle) * 4), Math.round(9 + Math.sin(angle) * 4), 2, 2, color);
+    }
+
+    // Gauge: the needle twitches, the reading never improves.
+    disc(ctx, 52, 38, 6, '#15122c');
+    disc(ctx, 52, 38, 5, shade(color, -0.3));
+    const needle = -2.2 + Math.sin(time * 6) * 0.15;
+    rect(ctx, Math.round(52 + Math.cos(needle) * 3), Math.round(38 + Math.sin(needle) * 3), 2, 2, '#ff4d6d');
+  },
+
+  /** PROXY WRAITH: a hooded shape that keeps knitting itself back together. */
+  wraith(ctx, time, color) {
+    const dark = shade(color, -0.55);
+
+    // Body: wide at the shoulders, frayed at the hem.
+    for (let y = 8; y < 44; y++) {
+      const shoulder = Math.min(1, (y - 8) / 10);
+      const fray = y > 34 ? Math.sin(y * 1.7 + time * 4) * 2 : 0;
+      const half = Math.round(6 + shoulder * 12 + fray);
+      if (y > 38 && (y + Math.floor(time * 8)) % 3 === 0) continue; // dissolving hem
+      rect(ctx, 32 - half, y, half * 2, 1, y < 12 ? color : dark);
+    }
+
+    // Hood opening and the light inside it.
+    for (let y = 10; y < 24; y++) {
+      const half = Math.round(7 - Math.abs(y - 17) * 0.35);
+      rect(ctx, 32 - half, y, half * 2, 1, '#07060f');
+    }
+    const glow = 0.5 + Math.sin(time * 3) * 0.5;
+    if (glow > 0.35) {
+      rect(ctx, 28, 16, 3, 3, color);
+      rect(ctx, 34, 16, 3, 3, color);
+    }
+
+    // Wisps trailing off it.
+    for (let i = 0; i < 5; i++) {
+      const drift = (time * 14 + i * 9) % 40;
+      rect(ctx, 10 + i * 11, Math.round(44 - drift / 2), 2, 2, shade(color, -0.2));
+    }
+  },
+
+  /** RANSOMWARE VAULT: a safe door, a spinning dial, and a countdown. */
+  vault(ctx, time, color) {
+    rect(ctx, 8, 3, 48, 42, color);
+    rect(ctx, 10, 5, 44, 38, '#15122c');
+    rect(ctx, 10, 5, 44, 2, shade(color, 0.35));
+
+    // Corner bolts.
+    for (const [x, y] of [[13, 8], [48, 8], [13, 37], [48, 37]]) {
+      rect(ctx, x, y, 3, 3, shade(color, 0.15));
+    }
+
+    // Dial: heavy, and always turning away from you.
+    const angle = -time * 1.4;
+    disc(ctx, 31, 22, 11, shade(color, -0.25));
+    disc(ctx, 31, 22, 9, '#0b0918');
+    disc(ctx, 31, 22, 3, color);
+    for (let spoke = 0; spoke < 6; spoke++) {
+      const a = angle + (Math.PI / 3) * spoke;
+      rect(ctx, Math.round(31 + Math.cos(a) * 7), Math.round(22 + Math.sin(a) * 7), 2, 2, color);
+    }
+
+    // Countdown blocks: they go out one at a time, then all come back.
+    const lit = 5 - (Math.floor(time * 1.5) % 6);
+    for (let i = 0; i < 5; i++) {
+      rect(ctx, 16 + i * 7, 38, 5, 3, i < lit ? '#ff4d6d' : '#2a2548');
+    }
+  },
+
+  /** SANDBOX: a containment cube with something bouncing inside it. */
+  sandbox(ctx, time, color) {
+    // Cube walls.
+    rect(ctx, 10, 6, 44, 2, color);
+    rect(ctx, 10, 40, 44, 2, color);
+    rect(ctx, 10, 6, 2, 36, color);
+    rect(ctx, 52, 6, 2, 36, color);
+
+    // Containment grid, breathing slightly.
+    const fade = Math.sin(time * 2) > 0 ? '#241e42' : '#2e2752';
+    for (let x = 16; x < 52; x += 6) rect(ctx, x, 8, 1, 32, fade);
+    for (let y = 12; y < 40; y += 6) rect(ctx, 12, y, 40, 1, fade);
+
+    // The captive, bouncing off the walls it cannot leave.
+    const bx = 16 + Math.abs(((time * 26) % 60) - 30);
+    const by = 12 + Math.abs(((time * 17) % 48) - 24);
+    rect(ctx, Math.round(bx), Math.round(by), 6, 6, '#ff4d6d');
+    rect(ctx, Math.round(bx) + 1, Math.round(by) + 1, 4, 4, shade(color, 0.4));
+
+    // Corner clamps.
+    for (const [x, y] of [[8, 4], [52, 4], [8, 40], [52, 40]]) {
+      rect(ctx, x, y, 4, 4, shade(color, 0.2));
+    }
+  },
+
+  /** REVENANT: a core that comes apart and pulls itself back together. */
+  revenant(ctx, time, color) {
+    // One cycle: whole, shattering, gone, reassembling.
+    const phase = (time % 4) / 4;
+    const spread = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
+
+    disc(ctx, 32, 24, 13, shade(color, -0.5));
+    disc(ctx, 32, 24, 11, '#15122c');
+
+    // Shards orbit out and come back in.
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI * 2 * i) / 8 + time * 0.6;
+      const radius = 6 + spread * 14;
+      rect(ctx,
+        Math.round(32 + Math.cos(a) * radius) - 2,
+        Math.round(24 + Math.sin(a) * radius) - 2,
+        4, 4, i % 2 ? color : shade(color, -0.2));
+    }
+
+    // The core itself, dimmest when it is most broken.
+    const core = spread > 0.7 ? shade(color, -0.4) : '#ff4d6d';
+    disc(ctx, 32, 24, 5 - Math.round(spread * 2), core);
+    if (spread < 0.3) {
+      rect(ctx, 29, 21, 2, 2, '#fff');
+      rect(ctx, 34, 21, 2, 2, '#fff');
+    }
+  },
 };
 
 /** Eight jagged polylines, revealed one at a time as the firewall drops. */

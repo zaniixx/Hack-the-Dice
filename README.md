@@ -17,11 +17,16 @@ The game uses native ES modules, so it needs to be served over HTTP —
 `file://` will not work.
 
 ```sh
-python3 -m http.server 8000
+python3 tools/serve.py
 # then open http://localhost:8000/
 ```
 
-Any static server will do.
+Any static server will do, but this one sends `Cache-Control: no-store`. That
+matters while developing: the game is ES modules, and a browser holding half of
+them from an earlier version while fetching the rest fresh fails with a
+missing-export error and a black screen. If that ever happens, hard-refresh
+(ctrl-shift-R) — and the page will tell you so, because anything thrown before
+the game boots is printed on screen rather than swallowed.
 
 ## What's in it
 
@@ -37,6 +42,49 @@ ends, whether it was traced or walked away from. Score is nodes breached,
 servers owned and scrap harvested, multiplied by the tier — deliberately not
 hacking power, which grows exponentially and would make one lucky build
 unbeatable forever. Boards filter by tier.
+
+**Eight boss protocols.** Node 5 of every server is guarded by one, and each
+breaks a different rule of the game:
+
+| Protocol | What it does |
+| --- | --- |
+| ANTIVIRUS | Quarantines one die after every roll |
+| ENCRYPTION KEY | An Execute without a pair deals 10% damage |
+| AI WATCHDOG | Dice showing 3 or less are absorbed |
+| RATE LIMITER | Only your three highest dice score |
+| PROXY WRAITH | Rebuilds 12% of its firewall after every Execute |
+| RANSOMWARE VAULT | Every Execute costs 3 scrap; miss the fee and it halves the hit |
+| SANDBOX | Your abilities have no charges on this node |
+| REVENANT | The first time its firewall falls, it comes back at 40% |
+
+They cycle in that order as the run climbs servers, and a tournament host can
+ban any of them.
+
+**Corporations with personalities.** Each server belongs to a corp that names
+its own nodes and talks back: OMNIDYNE files your intrusion as a learning
+opportunity, HELIX CAPITAL calls your best hit a rounding error, NULLSEC
+ORBITAL cannot find anyone who cares, and ARCHON AI has already simulated you
+losing. They greet you, sneer at a feeble Execute, sound rattled by a big one,
+and get a parting line when they lose a node, lose the server, or trace you.
+
+**A soundtrack, and a voice for every boss.** The music is a step sequencer
+built on the same two synth voices as the sound effects, playing on its own
+quieter bus under a held pad, with a fill every fourth bar. It follows tension
+rather than location: the market is warm, an ordinary node is steady, a boss is
+lower and faster, and one execute left drops everything for a pulse. Moods
+change on the bar line, never mid-phrase. Each boss protocol also has its own
+sound — a scanner rejecting a die, a valve slamming shut, a vault counting your
+scrap out — so a rule firing is recognisable without reading the log.
+
+**Boss cutscenes.** A protocol coming online stops the game and introduces
+itself: its portrait animated by the same painter that draws it in the fight,
+its name, the rule it is about to enforce, and a line of its own. Any key or
+click dismisses it, and it clears itself after a few seconds.
+
+**A tutorial that gets out of the way.** A first run is coached by rings around
+the control that matters and one line about why. Each step clears itself the
+moment the player does the thing, so anyone who already knows never waits for
+it, and SKIP ends it for good. The menu can bring it back.
 
 **Seeded runs.** Every run is driven by a seed, shown in the top bar and
 copyable with a click. Type one in to replay a run exactly — same dice, same
@@ -62,6 +110,14 @@ Because the store is browser-local (see below), boards live on the device that
 played them. To pull results in from another device, a runner copies their
 result code after a run and the host merges it into the board.
 
+**On a phone or tablet** the game is a full-screen app: the shell is pinned to
+the viewport so nothing scrolls or rubber-bands, zoom is off so a mistimed
+double tap cannot wreck a roll, and the two panels that are not needed moment to
+moment — the console log and the toolkit — become sheets that slide up over the
+board. The market opens itself when a node is breached. There is a FULL button
+for real full screen where the browser offers it, and adding the game to a home
+screen removes the browser chrome entirely on iOS.
+
 ### Running it for several people
 
 Serve on the network rather than on localhost, and the QR code carries a link
@@ -82,6 +138,8 @@ Three browser-based test pages, served the same way:
 | `tools/playthrough-test.html` | The real page, driven end to end: a node from roll to breach, the market, all three boss rules, the trace, a migration, special dice, abilities, the memory leak, and save/resume. |
 | `tools/arcade-test.html` | The start screen and everything around a run: signing in, threat levels applying to a run, seeded runs replaying identically, the leaderboard, hosting a tournament with bans, those bans holding in the market and at the boss, the live lobby, result codes, and the run-over screen. |
 | `tools/qr-test.html` | The QR encoder, against a decoder written independently in the test: round-trips the payload, checks the format information's BCH code, and checks each codeword block divides cleanly by its generator polynomial. |
+| `tools/audio-test.html` | The music and the sound effects, rendered into an `OfflineAudioContext` and measured: that every mood produces signal, that effects sit above the music, that each boss sound is audible, that nothing clips, and that mute means silence. A browser without a sound card never starts its audio clock, so this is the only way to check audio without ears. |
+| `tools/fit-test.html` | The layout, at whatever size the window is: that nothing scrolls, that the app fits the viewport, that the board keeps room, and that the sheets park off screen and slide back in. Open it on a device, or resize the browser — the window size is the input. |
 
 Each prints a green list and a pass/fail total. The two full-page tests stash
 and restore `localStorage`, so running them does not cost you your progress.
@@ -102,24 +160,27 @@ index.html              markup only: the console shell and its element ids
 src/
   main.js               composition root — wires everything, owns the frame loop
   styles/               one stylesheet per region of the console, plus arcade.css
-                        for the start screen, boards and tournament screens
+                        for the start screen and boards, and mobile.css for the
+                        full-screen touch layout
   core/                 dependency-free helpers: math, random, seeded random,
                         bit packing, format, storage, settings, speed-aware sleep
-  data/                 the game as data: dice, artifacts, abilities, enemies,
-                        difficulty tiers, icons, tuning constants, effects
-  audio/                synth.js (two voices, one context) + sfx.js (the sounds)
+  data/                 the game as data: dice, artifacts, abilities, bosses,
+                        corps, nodes, difficulty tiers, icons, tuning, effects
+  audio/                synth.js (two voices, two buses), sfx.js (the sounds,
+                        including one per boss) and music.js (the sequencer)
   engine/               dice-board.js — the 2.5D physics sandbox
   render/               canvas painters: sprites, the board, the enemy portrait,
                         and a small QR encoder
   game/                 rules and flow: state, scoring, turn, execute, shop,
-                        session, memory-leak, difficulty, score, leaderboard,
-                        tournament, live-run, save
+                        session, boss-rules, voice, soundtrack, memory-leak,
+                        difficulty, score, leaderboard, tournament, live-run, save
   services/             where persistence lives: store.js picks a backend,
                         local-store.js is the browser-local one
-  ui/                   the DOM: hud, log, fx, modals, screens, input, and the
-                        start screen with its leaderboard, live board and
-                        tournament views
-tools/                  the three test pages
+  ui/                   the DOM: hud, log, fx, modals, screens, input, viewport,
+                        sheets, tutorial, and the start screen with its
+                        leaderboard, live board and tournament views
+tools/                  test pages, plus the press tools: poster.html,
+                        trailer.html, capture_server.py, trailer-music.py
 ```
 
 ## Architecture
@@ -147,6 +208,15 @@ in `src/data/icons.js`. Nothing else changes — including the tournament ban
 screens, which are generated from the catalogs. Artifacts that need behaviour
 outside scoring are marked `passive: true` with a comment pointing at the code
 that implements them.
+
+**Bosses are hooks, not special cases.** A boss declares any of `onNodeStart`,
+`onSettled`, `absorbs`, `scoringDice`, `multiplier`, `afterExecute` and
+`survivesBreach`, and `game/boss-rules.js` is the only place that asks for them.
+Adding a ninth boss is an entry in `data/bosses.js` and a sprite painter in
+`render/enemy-sprites.js`; no flow code changes, and the tournament ban list and
+the code format pick it up on their own. (The code format is versioned for
+exactly that reason: more bosses means more ban bits, so `CODE_VERSION` moved to
+2 and codes made before that no longer decode.)
 
 **Scoring hooks fire in a fixed order**, which is what makes builds predictable:
 `perDie` as each die scores, then `bonus` for flat additions, then `multiplier`
@@ -179,6 +249,31 @@ code around 40 characters, which is what lets `render/qr.js` stay inside QR
 version 6 at error correction L, where there is a single block of codewords and
 no interleaving to get wrong.
 
+**The touch layout is one media query.** `styles/mobile.css` takes over below
+1120px or on any coarse pointer: the shell is fixed to the viewport, the log and
+toolkit panels become bottom sheets, and controls grow to thumb size. No markup
+moves — `ui/sheets.js` only toggles two classes on `<body>`. The height comes
+from `--app-height`, measured in `ui/viewport.js`, because a phone's `100vh`
+counts browser chrome that is not there.
+
+**Music is scheduled, not played.** `audio/music.js` writes notes a fraction of
+a second ahead of the audio clock on a 25ms timer, so the beat does not wobble
+when the game loop is busy scoring. A mood is a bar of sixteenths — which steps
+get a kick, a hat, a bass note, an arpeggio note, a held pad — and
+`game/soundtrack.js` maps the run to one, as a pure function that can be tested
+without any audio.
+
+**The synth can render offline.** `initAudio()` takes a context, so the whole
+graph can be built on an `OfflineAudioContext` and rendered to samples. That is
+how the mix is checked: music peaks around 0.22, effects around 0.44, each boss
+sound between those, nothing clipping. Guessing at levels by ear is how a game
+ends up inaudible on someone else's machine.
+
+**The tutorial follows the run.** `ui/tutorial.js` is driven from the HUD's
+repaint rather than driving the game itself, so it cannot get out of step with
+what is on screen. Each step declares when it is relevant and when it is done;
+a step whose moment has passed clears itself rather than waiting.
+
 **Live bindings.** `state.js` exports `run` and `dice-board.js` exports `dice`;
 both are reassigned when a run starts or the pool changes. Import them and read
 `run.scrap` at call time — never destructure them into a local, or you will hold
@@ -210,6 +305,19 @@ saves still load — they simply resume on the default threat level. A save
 records the rig and how far the run got, never a node in progress, so reloading
 mid-node restarts that node rather than rerolling a bad hand. Anything in a save
 the catalogs no longer recognise is dropped on load rather than breaking it.
+
+## Press kit
+
+`press/` holds the jam material — a 30-second 1080p trailer, a looping GIF, the
+poster at two sizes, and the soundtrack — plus a README with the blurb and the
+commands to rebuild any of it. It is all generated from the game: the trailer's
+dice are thrown by the real physics and drawn by the real renderer, and the
+bosses, threat levels and QR code are read from the catalogs, so the press
+material cannot drift from the game.
+
+The tools that make it live in `tools/`: `poster.html`, `trailer.html`,
+`capture_server.py` (which the trailer posts frames to) and `trailer-music.py`
+(a chiptune generator built on the standard library).
 
 ## Where this came from
 

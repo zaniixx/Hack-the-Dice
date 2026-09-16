@@ -6,14 +6,15 @@
  * depends downwards, and the loop here is what turns those pieces into a game.
  */
 import { settings } from './core/settings.js';
-import { WATCHDOG_ABSORB_MAX } from './data/rules.js';
+
 import {
-  setDicePool, stepPhysics, stepParticles, layoutTray,
+  dice, setDicePool, stepPhysics, stepParticles, layoutTray,
   allSettled, forceSettleAll, secondsSinceThrow, MAX_ROLL_SECONDS,
 } from './engine/dice-board.js';
 import { initBoardView, syncBoardSize, drawBoard } from './render/board-view.js';
 import { initEnemyView, resetEnemyView, markEnemyDestroyed, drawEnemy } from './render/enemy-view.js';
 import { els } from './ui/dom.js';
+import { trackViewportHeight, blockZoomGestures } from './ui/viewport.js';
 import { updateUI, syncSettingsButtons } from './ui/hud.js';
 import { bindInput } from './ui/input.js';
 import { run, Phase, createRun } from './game/state.js';
@@ -22,6 +23,7 @@ import { executePayload } from './game/execute.js';
 import { buyItem, sellItem, refreshShop } from './game/shop.js';
 import { beginNode, breachNode, showTitle, openMenu } from './game/session.js';
 import { tickMemoryLeak } from './game/memory-leak.js';
+import { allowedDice, isAbsorbed } from './game/scoring.js';
 import { stopLiveRun } from './game/live-run.js';
 
 /** Longest frame the simulation will accept, so a stalled tab cannot teleport dice. */
@@ -52,10 +54,14 @@ function checkSettled() {
   }
 }
 
-/** Value at or below which the current boss will absorb a die, else null. */
-function absorbThreshold() {
-  const watchdogWatching = run && run.phase === Phase.MANIP && run.enemy?.boss === 'watchdog';
-  return watchdogWatching ? WATCHDOG_ABSORB_MAX : null;
+/**
+ * A test for dice this node's boss will not let score, or null when nothing
+ * will be refused. The board underlines them while the player is deciding.
+ */
+function doomedDiceTest() {
+  if (!run || run.phase !== Phase.MANIP || !run.enemy || !run.enemy.boss) return null;
+  const allowed = allowedDice(dice, run.enemy);
+  return die => isAbsorbed(die, run.enemy) || !allowed.has(die);
 }
 
 function frame(now) {
@@ -70,7 +76,7 @@ function frame(now) {
 
   if (run) checkSettled();
 
-  drawBoard(dt, { absorbBelow: absorbThreshold() });
+  drawBoard(dt, { isDoomed: doomedDiceTest() });
   drawEnemy(now / 1000, dt, run?.enemy);
 
   if (tickMemoryLeak(dt).firewallDown) breachNode();
@@ -106,6 +112,10 @@ function onContainerResize() {
 }
 
 function start() {
+  // Before anything measures itself: the layout depends on --app-height.
+  trackViewportHeight();
+  blockZoomGestures();
+
   syncSettingsButtons();
   createRun();
 
@@ -138,6 +148,9 @@ function start() {
 
   requestAnimationFrame(frame);
   showTitle();
+
+  // Tells the boot-error reporter in index.html to stand down.
+  window.__htdBooted = true;
 }
 
 start();

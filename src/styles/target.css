@@ -107,5 +107,10 @@
 .ln.dim { color:var(--dim); }
 .ln.white { color:var(--ink); }
 .ln.lime { color:var(--lime); }
+/* The corporation talking: set apart from the machine's own output. */
+.ln.corp {
+  color:var(--violet);
+  font-style:italic;
+}
 
 

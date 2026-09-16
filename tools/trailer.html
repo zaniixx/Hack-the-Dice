@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hack the Dice — trailer capture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #07060f; color: #dfe6ff; font: 13px ui-monospace, monospace; }
+  #stage { display: block; margin: 10px auto; image-rendering: pixelated; border: 1px solid #241e42; }
+  #status { text-align: center; color: #b6ff3d; }
+  /* The real board renders here at 1:3 and is blitted into the trailer frame. */
+  #boardBox { position: absolute; left: -4000px; top: 0; width: 960px; height: 540px; }
+</style>
+</head>
+<body>
+<canvas id="stage" width="960" height="540"></canvas>
+<div id="status">starting…</div>
+<div id="boardBox"><canvas id="board"></canvas></div>
+<canvas id="enemy" width="64" height="48" style="position:absolute;left:-4000px"></canvas>
+
+<script type="module">
+/*
+ * The trailer, rendered frame by frame.
+ *
+ * The footage is real: the dice are thrown by the game's own physics and drawn
+ * by its own board renderer, and the target is painted by the same code the
+ * game uses. Everything else — captions, counters, the cuts — is composited on
+ * top here.
+ *
+ * Frames are posted to the capture server (tools/capture_server.py) and encoded
+ * with ffmpeg; see press/README.md. Time is fixed-step, so the result is
+ * identical no matter how slowly the capture runs.
+ */
+import { setDicePool, throwDice, stepPhysics, stepParticles, dice, board } from '../src/engine/dice-board.js';
+import { initBoardView, syncBoardSize, drawBoard } from '../src/render/board-view.js';
+import { initEnemyView, resetEnemyView, drawEnemy, flashEnemyHit, explodeEnemy } from '../src/render/enemy-view.js';
+import { ENEMY_SPRITES } from '../src/render/enemy-sprites.js';
+import { BOSSES, BOSS_ORDER } from '../src/data/bosses.js';
+import { DIFFICULTIES, DIFFICULTY_ORDER } from '../src/data/difficulty.js';
+import { qrMatrix } from '../src/render/qr.js';
+import { seedRun } from '../src/core/game-random.js';
+
+const W = 960;
+const H = 540;
+const FPS = 24;
+const DURATION = 30;
+const TOTAL_FRAMES = FPS * DURATION;
+const DT = 1 / FPS;
+
+const stage = document.getElementById('stage');
+const ctx = stage.getContext('2d');
+const status = document.getElementById('status');
+
+const INK = '#dfe6ff';
+const DIM = '#7e83ad';
+const CYAN = '#3df2ff';
+const MAG = '#ff3df0';
+const LIME = '#b6ff3d';
+const AMBER = '#ffc23d';
+const RED = '#ff4d6d';
+
+// ---- Drawing helpers --------------------------------------------------------
+
+const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+const clamp01 = t => Math.min(1, Math.max(0, t));
+
+function px(size) {
+  ctx.font = `${size}px "Press Start 2P", monospace`;
+}
+
+function text(str, { x = W / 2, y, size = 16, color = INK, align = 'center', alpha = 1, shadow = true }) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  px(size);
+  ctx.textAlign = align;
+  if (shadow) {
+    ctx.fillStyle = '#000';
+    ctx.fillText(str, x + 3, y + 3);
+  }
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function body(str, { x = W / 2, y, size = 26, color = DIM, align = 'center', alpha = 1 }) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = `${size}px "VT323", monospace`;
+  ctx.textAlign = align;
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function backdrop() {
+  ctx.fillStyle = '#07060f';
+  ctx.fillRect(0, 0, W, H);
+}
+
+function scanlines(alpha = 0.05) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.restore();
+}
+
+function vignette() {
+  const gradient = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95);
+  gradient.addColorStop(0, 'rgba(0,0,0,0)');
+  gradient.addColorStop(1, 'rgba(0,0,0,.55)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, W, H);
+}
+
+/** A hard white flash on the first frames of a cut. */
+function cutFlash(local) {
+  if (local > 0.12) return;
+  ctx.save();
+  ctx.globalAlpha = (1 - local / 0.12) * 0.55;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+/** Torn slices, the same idea as the enemy's hit glitch. */
+function glitchSlices(strength) {
+  if (strength <= 0) return;
+  const frame = ctx.getImageData(0, 0, W, H);
+  const layer = document.createElement('canvas');
+  layer.width = W;
+  layer.height = H;
+  layer.getContext('2d').putImageData(frame, 0, 0);
+  backdrop();
+  for (let y = 0; y < H; y += 6) {
+    const offset = Math.random() < 0.4 ? Math.round((Math.random() - 0.5) * 30 * strength) : 0;
+    ctx.drawImage(layer, 0, y, W, 6, offset, y, W, 6);
+  }
+}
+
+function titleCard(cx, cy, size, wobble) {
+  const chroma = 4 + wobble * 6;
+  px(size);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = CYAN;
+  ctx.fillText('HACK THE DICE', cx - chroma, cy);
+  ctx.fillStyle = MAG;
+  ctx.fillText('HACK THE DICE', cx + chroma, cy);
+  ctx.fillStyle = '#000';
+  ctx.fillText('HACK THE DICE', cx + 3, cy + 3);
+  ctx.fillStyle = '#fff';
+  ctx.fillText('HACK THE DICE', cx, cy);
+}
+
+/** A caption plate in the bottom-left, typed in. */
+function caption(str, local, start = 0.2, sub = '') {
+  if (local < start) return;
+  const shown = Math.floor(clamp01((local - start) / 0.45) * str.length);
+  const label = str.slice(0, shown);
+  ctx.save();
+  ctx.fillStyle = 'rgba(7,6,15,.82)';
+  ctx.fillRect(40, H - 108, Math.max(260, label.length * 17 + 40), sub ? 76 : 50);
+  ctx.fillStyle = LIME;
+  ctx.fillRect(40, H - 108, 4, sub ? 76 : 50);
+  ctx.restore();
+  text(label, { x: 60, y: H - 76, size: 17, color: INK, align: 'left' });
+  if (sub) body(sub, { x: 60, y: H - 48, size: 24, color: DIM, align: 'left' });
+}
+
+// ---- The real game canvases -------------------------------------------------
+
+const boardCanvas = document.getElementById('board');
+initBoardView(boardCanvas, document.getElementById('boardBox'));
+syncBoardSize();
+
+const enemyCanvas = document.getElementById('enemy');
+initEnemyView(enemyCanvas);
+resetEnemyView();
+
+const target = {
+  name: 'REVENANT',
+  sprite: 'revenant',
+  boss: 'revenant',
+  color: RED,
+  hp: 411840,
+  max: 411840,
+};
+
+seedRun('TRAILER');
+
+/** Blit the board at 1:1 pixels into the frame. */
+function blitBoard(x, y, scale, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(boardCanvas, 0, 0, board.width, board.height,
+    x, y, board.width * scale, board.height * scale);
+  ctx.restore();
+}
+
+function blitEnemy(x, y, scale) {
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(enemyCanvas, 0, 0, 64, 48, x, y, 64 * scale, 48 * scale);
+}
+
+/** One boss portrait, painted fresh so each shows its own animation. */
+const bossPlate = document.createElement('canvas');
+bossPlate.width = 64;
+bossPlate.height = 48;
+const bossCtx = bossPlate.getContext('2d');
+function blitBoss(id, x, y, scale, time, color) {
+  bossCtx.clearRect(0, 0, 64, 48);
+  bossCtx.fillStyle = '#0b0918';
+  bossCtx.fillRect(0, 0, 64, 48);
+  ENEMY_SPRITES[BOSSES[id].sprite](bossCtx, time, color);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(bossPlate, 0, 0, 64, 48, x, y, 64 * scale, 48 * scale);
+}
+
+// ---- Score plate, in the game's own shape -----------------------------------
+
+function scorePlate(bits, mult, power, y) {
+  const boxes = [
+    { label: 'BITS', value: bits, color: CYAN, x: 60, w: 250 },
+    { label: 'MULT', value: mult, color: MAG, x: 340, w: 250 },
+    { label: 'HACKING POWER', value: power, color: AMBER, x: 620, w: 280 },
+  ];
+  for (const box of boxes) {
+    ctx.fillStyle = 'rgba(7,6,15,.85)';
+    ctx.fillRect(box.x, y, box.w, 74);
+    ctx.strokeStyle = box.color;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(box.x + 1.5, y + 1.5, box.w - 3, 71);
+    text(box.label, { x: box.x + box.w / 2, y: y + 24, size: 10, color: box.color, alpha: 0.85 });
+    text(box.value, { x: box.x + box.w / 2, y: y + 58, size: 22, color: '#fff' });
+  }
+  text('×', { x: 325, y: y + 48, size: 18, color: DIM });
+  text('=', { x: 605, y: y + 48, size: 18, color: DIM });
+}
+
+function firewallBar(x, y, w, fraction, label) {
+  ctx.fillStyle = '#1a0f1f';
+  ctx.fillRect(x, y, w, 26);
+  ctx.fillStyle = RED;
+  for (let i = 0; i < Math.round(w * clamp01(fraction)); i += 8) {
+    ctx.fillRect(x + i, y, 6, 26);
+  }
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 1.5, y + 1.5, w - 3, 23);
+  text('FIREWALL', { x, y: y - 12, size: 11, color: RED, align: 'left' });
+  text(label, { x: x + w, y: y - 12, size: 11, color: RED, align: 'right' });
+}
+
+// ---- Flying numbers ---------------------------------------------------------
+
+const flyers = [];
+function fly(label, from, to, start, color, size = 18) {
+  flyers.push({ label, from, to, start, dur: 0.7, color, size });
+}
+function drawFlyers(t) {
+  for (const f of flyers) {
+    const p = (t - f.start) / f.dur;
+    if (p < 0 || p > 1) continue;
+    const e = ease(p);
+    const x = f.from[0] + (f.to[0] - f.from[0]) * e;
+    const y = f.from[1] + (f.to[1] - f.from[1]) * e - Math.sin(p * Math.PI) * 42;
+    text(f.label, { x, y, size: f.size, color: f.color, alpha: p > 0.85 ? (1 - p) / 0.15 : 1 });
+  }
+}
+
+// ---- Shots ------------------------------------------------------------------
+
+let boardLive = false;
+
+const SHOTS = [
+  {
+    name: 'title', at: 0, dur: 2.6,
+    draw(local) {
+      backdrop();
+      const slam = ease(local / 0.3);
+      const size = 46 * (1 + (1 - slam) * 0.9);
+      titleCard(W / 2, H / 2 - 6, size, Math.max(0, 0.6 - local) + (local % 0.5 < 0.05 ? 0.5 : 0));
+      if (local > 0.7) {
+        body('A CYBERPUNK DICE ROGUELIKE', {
+          y: H / 2 + 54, size: 30, color: DIM, alpha: clamp01((local - 0.7) / 0.4),
+        });
+      }
+      scanlines(0.06);
+      if (local % 0.7 < 0.06) glitchSlices(0.5);
+      vignette();
+    },
+  },
+  {
+    name: 'roll', at: 2.6, dur: 4.4,
+    enter() {
+      boardLive = true;
+      setDicePool(['d20', 'virus', 'd6', 'amp', 'qubit', 'd12', 'd6']);
+      throwDice(dice, { fullThrow: true });
+    },
+    draw(local) {
+      backdrop();
+      blitBoard(0, 0, 3);
+      // Lock a couple of dice part way through, as a player would.
+      if (local > 2.2) {
+        dice[1].locked = true;
+        dice[4].locked = true;
+      }
+      scanlines(0.05);
+      vignette();
+      caption(local > 2.4 ? 'LOCK WHAT YOU KEEP' : 'ROLL YOUR POOL', local,
+        local > 2.4 ? 2.5 : 0.25,
+        local > 2.4 ? 'Reroll the rest. Twice per execute.' : 'Seven dice, real physics, one board.');
+      cutFlash(local);
+    },
+  },
+  {
+    name: 'score', at: 7.0, dur: 4.2,
+    enter() {
+      const spots = dice.slice(0, 6).map(die => [die.x * 3, (die.y - die.z) * 3]);
+      const bitsBox = [185, 336];
+      const multBox = [465, 336];
+      ['+17', '+12', '+9', '+14', '+11', '+8'].forEach((label, i) => {
+        fly(label, spots[i] || [480, 260], bitsBox, 0.35 + i * 0.16, CYAN);
+      });
+      ['×2', '+3', '×1.5', '×4', '×2'].forEach((label, i) => {
+        fly(label, spots[i % spots.length] || [480, 260], multBox, 1.5 + i * 0.22, MAG, 20);
+      });
+    },
+    draw(local) {
+      backdrop();
+      blitBoard(0, -40, 3, 1);
+      scanlines(0.05);
+      vignette();
+
+      const bitsShown = Math.round(132 * ease(clamp01((local - 0.3) / 1.3)));
+      const multShown = (1 + 3119 * ease(clamp01((local - 1.4) / 1.5))).toFixed(0);
+      const powerShown = local < 2.9 ? '?' : '411,840';
+      scorePlate(bitsShown.toLocaleString('en-US'), Number(multShown).toLocaleString('en-US'), powerShown, 300);
+      drawFlyers(local);
+      caption('BITS × MULT = HACKING POWER', local, 0.2, 'Chain artifacts. Watch it get silly.');
+      cutFlash(local);
+    },
+  },
+  {
+    name: 'breach', at: 11.2, dur: 4.2,
+    enter() {
+      boardLive = false;
+      resetEnemyView();
+      target.hp = target.max;
+    },
+    draw(local) {
+      backdrop();
+
+      // The firewall drops, then the target comes apart.
+      const drain = ease(clamp01((local - 1.2) / 0.9));
+      target.hp = Math.round(target.max * (1 - drain));
+      if (local > 1.2 && local < 1.35) flashEnemyHit();
+      if (local > 2.25 && !this.exploded) {
+        explodeEnemy();
+        this.exploded = true;
+      }
+
+      const shake = local > 2.25 && local < 2.7 ? (Math.random() - 0.5) * 16 : 0;
+      blitEnemy(90 + shake, 90 + shake, 5.2);
+
+      if (local < 2.3) {
+        text('REVENANT', { x: 470, y: 256, size: 20, color: RED, align: 'left', alpha: clamp01(local / 0.3) });
+        body('Restore point: it comes back at 40%. Once.', {
+          x: 470, y: 284, size: 24, color: DIM, align: 'left', alpha: clamp01((local - 0.2) / 0.3) });
+      }
+      firewallBar(470, 340, 420, 1 - drain,
+        `${target.hp.toLocaleString('en-US')} / ${target.max.toLocaleString('en-US')}`);
+
+      if (local > 0.35 && local < 2.4) {
+        const punch = ease(clamp01((local - 0.35) / 0.25));
+        text('412K', { x: 680, y: 210, size: 54 * (0.4 + punch * 0.6), color: '#fff' });
+      }
+      if (local > 2.35) {
+        text('BREACHED', { x: 680, y: 210, size: 34, color: LIME, alpha: clamp01((local - 2.35) / 0.2) });
+      }
+
+      scanlines(0.05);
+      vignette();
+      caption('BREACH THE NODE', local, 0.2, 'Four executes before the trace finds you.');
+      cutFlash(local);
+      if (local > 2.25 && local < 2.4) glitchSlices(1);
+    },
+  },
+  {
+    name: 'bosses', at: 15.4, dur: 4.4,
+    draw(local) {
+      backdrop();
+      text('EIGHT BOSS PROTOCOLS', { y: 78, size: 26, color: RED });
+      body('Each one breaks a different rule of the game.', { y: 116, size: 28, color: DIM });
+
+      BOSS_ORDER.forEach((id, i) => {
+        const appear = clamp01((local - 0.35 - i * 0.16) / 0.3);
+        if (appear <= 0) return;
+        const col = i % 4;
+        const row = Math.floor(i / 4);
+        const x = 70 + col * 215;
+        const y = 150 + row * 190 - (1 - ease(appear)) * 26;
+
+        ctx.save();
+        ctx.globalAlpha = appear;
+        blitBoss(id, x, y, 2.6, 1.2 + i * 0.8, i % 2 ? CYAN : RED);
+        ctx.strokeStyle = '#241e42';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, 64 * 2.6, 48 * 2.6);
+        text(BOSSES[id].name, { x: x + 83, y: y + 148, size: 10, color: INK, alpha: appear });
+        ctx.restore();
+      });
+
+      scanlines(0.05);
+      vignette();
+      cutFlash(local);
+    },
+  },
+  {
+    name: 'tiers', at: 19.8, dur: 3.4,
+    draw(local) {
+      backdrop();
+      text('PICK YOUR THREAT LEVEL', { y: 92, size: 26, color: CYAN });
+
+      DIFFICULTY_ORDER.forEach((id, i) => {
+        const tier = DIFFICULTIES[id];
+        const appear = clamp01((local - 0.3 - i * 0.18) / 0.35);
+        if (appear <= 0) return;
+        const x = 60 + i * 218;
+        const y = 150 + (1 - ease(appear)) * 40;
+
+        ctx.save();
+        ctx.globalAlpha = appear;
+        ctx.fillStyle = 'rgba(7,6,15,.9)';
+        ctx.fillRect(x, y, 200, 250);
+        ctx.strokeStyle = tier.color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x + 1.5, y + 1.5, 197, 247);
+        ctx.fillStyle = tier.color;
+        for (let bar = 0; bar < tier.rank; bar++) ctx.fillRect(x + 18 + bar * 20, y + 22, 14, 14);
+        ctx.restore();
+
+        text(tier.name.split(' ')[0], { x: x + 100, y: y + 82, size: 15, color: tier.color, alpha: appear });
+        text(tier.name.split(' ')[1] || '', { x: x + 100, y: y + 108, size: 15, color: tier.color, alpha: appear });
+        body(`${tier.executes} executes`, { x: x + 100, y: y + 156, size: 26, color: DIM, alpha: appear });
+        body(`${tier.rerolls} reroll${tier.rerolls === 1 ? '' : 's'}`, { x: x + 100, y: y + 184, size: 26, color: DIM, alpha: appear });
+        body(`score ×${tier.scoreMultiplier}`, { x: x + 100, y: y + 212, size: 26, color: tier.color, alpha: appear });
+      });
+
+      scanlines(0.05);
+      vignette();
+      cutFlash(local);
+    },
+  },
+  {
+    name: 'tournament', at: 23.2, dur: 3.4,
+    draw(local) {
+      backdrop();
+      text('HOST A TOURNAMENT', { y: 80, size: 26, color: LIME });
+      body('One code carries the rules. Scan it, or say it out loud.', { y: 116, size: 28, color: DIM });
+
+      // The op code, big.
+      text('KXM73', { x: 300, y: 250, size: 68, color: LIME, alpha: local % 1 < 0.9 ? 1 : 0.35 });
+      body('OP CODE', { x: 300, y: 290, size: 26, color: DIM });
+
+      // A real QR of a real invite code.
+      const qr = qrMatrix('HTD-39YT3HR0G004GMCH00GJB1F620CT831TE8B20RR8HEK8J1MGKC0');
+      if (qr) {
+        const scale = 5;
+        const size = qr.size * scale;
+        const x = 640 - size / 2;
+        const y = 210 - size / 2;
+        ctx.fillStyle = '#dfe6ff';
+        ctx.fillRect(x - 12, y - 12, size + 24, size + 24);
+        ctx.fillStyle = '#07060f';
+        for (let row = 0; row < qr.size; row++) {
+          for (let col = 0; col < qr.size; col++) {
+            if (qr.modules[row][col]) ctx.fillRect(x + col * scale, y + row * scale, scale, scale);
+          }
+        }
+      }
+
+      // The lobby, mid-race: two runners swap places.
+      const swapped = local > 1.6;
+      const rows = swapped
+        ? [['1', 'NEO', '18,400', LIME], ['2', 'TRINITY', '17,950', INK], ['3', 'DOZER', '6,200', DIM]]
+        : [['1', 'TRINITY', '17,950', INK], ['2', 'NEO', '12,100', LIME], ['3', 'DOZER', '6,200', DIM]];
+      rows.forEach((row, i) => {
+        const y = 360 + i * 44;
+        ctx.fillStyle = i === 0 ? 'rgba(182,255,61,.10)' : 'rgba(7,6,15,.7)';
+        ctx.fillRect(220, y - 26, 520, 38);
+        text(row[0], { x: 240, y, size: 14, color: AMBER, align: 'left' });
+        text(row[1], { x: 290, y, size: 14, color: row[3], align: 'left' });
+        text(row[2], { x: 700, y, size: 14, color: row[3], align: 'right' });
+      });
+      text('LIVE', { x: 480, y: 330, size: 11, color: LIME, alpha: local % 0.8 < 0.5 ? 1 : 0.3 });
+
+      scanlines(0.05);
+      vignette();
+      cutFlash(local);
+    },
+  },
+  {
+    name: 'end', at: 26.6, dur: 3.4,
+    draw(local) {
+      backdrop();
+      titleCard(W / 2, 220, 40, local < 0.2 ? 0.8 : 0.12);
+      body('Breach corporate firewalls with a pool of virtual dice.', {
+        y: 272, size: 30, color: DIM, alpha: clamp01((local - 0.3) / 0.4),
+      });
+
+      DIFFICULTY_ORDER.forEach((id, i) => {
+        ctx.fillStyle = DIFFICULTIES[id].color;
+        ctx.globalAlpha = clamp01((local - 0.6 - i * 0.1) / 0.3);
+        ctx.fillRect(W / 2 - 240 + i * 122, 316, 108, 8);
+        ctx.globalAlpha = 1;
+      });
+
+      if (local > 1.1) {
+        text('PLAY IT IN YOUR BROWSER', {
+          y: 400, size: 22, color: LIME, alpha: clamp01((local - 1.1) / 0.4),
+        });
+        body('No install. No account.', { y: 440, size: 28, color: DIM, alpha: clamp01((local - 1.4) / 0.4) });
+      }
+
+      scanlines(0.06);
+      vignette();
+      cutFlash(local);
+    },
+  },
+];
+
+// ---- Capture ----------------------------------------------------------------
+
+const entered = new Set();
+
+function renderFrame(frame) {
+  const t = frame / FPS;
+  const shot = SHOTS.find(s => t >= s.at && t < s.at + s.dur) || SHOTS[SHOTS.length - 1];
+
+  if (!entered.has(shot.name)) {
+    entered.add(shot.name);
+    shot.enter?.();
+  }
+
+  // The game keeps running underneath the shots that show it.
+  if (boardLive) {
+    stepPhysics(DT);
+    stepPhysics(DT);
+    stepParticles(DT);
+    drawBoard(DT, {});
+  }
+  drawEnemy(t, DT, shot.name === 'breach' ? target : null);
+
+  shot.draw.call(shot, t - shot.at);
+}
+
+const postFrame = (frame, blob) =>
+  fetch(`/frame/${frame}`, { method: 'POST', body: blob });
+
+const toBlob = () => new Promise(resolve => stage.toBlob(resolve, 'image/png'));
+
+await document.fonts.load('16px "Press Start 2P"');
+await document.fonts.load('26px "VT323"');
+await document.fonts.ready;
+
+for (let frame = 0; frame < TOTAL_FRAMES; frame++) {
+  renderFrame(frame);
+  await postFrame(frame, await toBlob());
+  if (frame % 24 === 0) {
+    status.textContent = `frame ${frame} / ${TOTAL_FRAMES}`;
+    await new Promise(r => setTimeout(r, 0));
+  }
+}
+
+status.textContent = 'done';
+await fetch('/done', { method: 'POST', body: String(TOTAL_FRAMES) });
+</script>
+</body>
+</html>

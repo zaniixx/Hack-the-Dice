@@ -12,6 +12,24 @@ export const els = {
   fx: $('#fx'),
   modal: $('#modal'),
   start: $('#start'),
+  sheetBackdrop: $('#sheetBackdrop'),
+
+  // Boss cutscene
+  cutscene: $('#cutscene'),
+  cutLabel: $('#cutLabel'),
+  cutSprite: $('#cutSprite'),
+  cutName: $('#cutName'),
+  cutRule: $('#cutRule'),
+  cutLine: $('#cutLine'),
+
+  // First-run tutorial
+  coach: $('#coach'),
+  coachRing: $('#coachRing'),
+  coachNote: $('#coachNote'),
+  coachTitle: $('#coachTitle'),
+  coachText: $('#coachText'),
+  coachStep: $('#coachStep'),
+  coachSkip: $('#coachSkip'),
 
   // Top bar
   handle: $('#tHandle'),
@@ -25,6 +43,9 @@ export const els = {
   seed: $('#tSeed'),
   best: $('#tBest'),
   speedButton: $('#btnSpeed'),
+  rigButton: $('#btnRig'),
+  logButton: $('#btnLog'),
+  fullscreenButton: $('#btnFull'),
   soundButton: $('#btnSound'),
   menuButton: $('#btnMenu'),
 

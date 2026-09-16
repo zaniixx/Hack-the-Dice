@@ -27,7 +27,10 @@ import { countPairs, longestStraight } from '../src/data/combos.js';
 import { ARTIFACTS } from '../src/data/artifacts.js';
 import { ABILITIES } from '../src/data/abilities.js';
 import { definitionOf, idsOf, ItemKind } from '../src/data/catalog.js';
-import { corpName, nodeHP, bossForServer } from '../src/data/enemies.js';
+import { nodeHP } from '../src/data/enemies.js';
+import { BOSSES, BOSS_ORDER, bossForServer } from '../src/data/bosses.js';
+import { CORPS, corpName, corpFor } from '../src/data/corps.js';
+import { ENEMY_SPRITES } from '../src/render/enemy-sprites.js';
 import { applyScoringValues, comboTags, isAbsorbed } from '../src/game/scoring.js';
 import { dieSprite, dieIconURL } from '../src/render/die-sprites.js';
 import { iconURL } from '../src/render/icon-sprites.js';
@@ -41,6 +44,8 @@ import {
   seedRun, restoreRng, rngState, gameInt, normaliseSeed, randomSeed,
 } from '../src/core/game-random.js';
 import { compareEntries } from '../src/services/store.js';
+import { moodFor } from '../src/game/soundtrack.js';
+import { sfx } from '../src/audio/sfx.js';
 
 const out = document.getElementById('out');
 let failures = 0;
@@ -76,8 +81,36 @@ try {
   check('nodeHP boss', nodeHP(1, 5), Math.round(40 * Math.pow(1.55, 4) * 2.2));
   check('nodeHP server 2', nodeHP(2, 1), 280);
   check('corpName wraps', corpName(7), 'OMNIDYNE MK2');
-  check('bossForServer cycles', [1, 2, 3, 4].map(bossForServer),
-    ['antivirus', 'encryption', 'watchdog', 'antivirus']);
+  check('bosses come in order', [1, 2, 3, 4, 5].map(bossForServer),
+    ['antivirus', 'encryption', 'watchdog', 'throttle', 'wraith']);
+  check('the boss list wraps', bossForServer(BOSS_ORDER.length + 1), BOSS_ORDER[0]);
+
+  // Every boss has to be playable: a rule to read, and a face to show.
+  check('there are eight bosses', BOSS_ORDER.length, 8);
+  check('every boss states its rule',
+    BOSS_ORDER.every(id => BOSSES[id].rule.length > 20), true);
+  check('every boss has a sprite painter',
+    BOSS_ORDER.every(id => typeof ENEMY_SPRITES[BOSSES[id].sprite] === 'function'), true);
+  check('every boss enforces something',
+    BOSS_ORDER.every(id => ['onNodeStart', 'onSettled', 'absorbs', 'scoringDice',
+      'multiplier', 'afterExecute', 'survivesBreach'].some(hook => BOSSES[id][hook])), true);
+
+  // Rate limiter keeps the best three, whatever order they arrive in.
+  const throttled = BOSSES.throttle.scoringDice(
+    [2, 6, 4, 1, 5].map(v => ({ scoringValue: v })));
+  check('rate limiter keeps the best three',
+    throttled.map(die => die.scoringValue), [6, 5, 4]);
+
+  // Every corp is a character, with somewhere to put the words.
+  const EVENTS = ['greet', 'weak', 'hurt', 'breach', 'owned', 'traced'];
+  check('six corporations', CORPS.length, 6);
+  check('every corp has a full voice',
+    CORPS.every(corp => EVENTS.every(event => corp.voice[event] && corp.voice[event].length)), true);
+  check('every corp names its own nodes',
+    CORPS.every(corp => corp.nodes.length >= 6), true);
+  check('every corp has a tagline and a colour',
+    CORPS.every(corp => corp.tagline && /^#[0-9a-f]{6}$/i.test(corp.color)), true);
+  check('servers map to corps', corpFor(3).name, CORPS[2].name);
 
   // Artifact hooks, driven by a stand-in tally.
   const die = v => ({ scoringValue: v, type: 'd6' });
@@ -199,6 +232,20 @@ try {
   check('a result code round trips',
     decodeResult(encodeResult({ id: 'x1', handle: 'NEO', score: 4200 })).score, 4200);
   check('a tournament code is not a result code', decodeResult(tournament.code), null);
+
+  // The soundtrack follows tension, not location.
+  check('the menu has its own mood', moodFor({ phase: 'title' }), 'menu');
+  check('an ordinary node', moodFor({ phase: 'ready', executes: 4, maxExecutes: 4, enemy: {} }), 'node');
+  check('a boss node', moodFor({ phase: 'ready', executes: 4, enemy: { boss: 'revenant' } }), 'boss');
+  check('the last execute beats the boss theme',
+    moodFor({ phase: 'ready', executes: 1, enemy: { boss: 'revenant' } }), 'danger');
+  check('a leak still draining is danger', moodFor({ phase: 'leakwait', executes: 3 }), 'danger');
+  check('the market', moodFor({ phase: 'shop', executes: 4 }), 'shop');
+  check('a finished run goes quiet', moodFor({ phase: 'over' }), 'silence');
+
+  check('every boss has a sound',
+    ['bossOnline', 'quarantine', 'cipher', 'absorb', 'throttle', 'regen', 'extort', 'contain', 'restore']
+      .every(name => typeof sfx[name] === 'function'), true);
 
   const summary = failures ? `${failures} FAILURE(S)` : 'ALL CHECKS PASSED';
   out.insertAdjacentHTML('beforeend', `<h1 class="${failures ? 'fail' : 'pass'}">${summary}</h1>`);

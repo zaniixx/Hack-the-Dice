@@ -231,6 +231,39 @@
 .error { font-size: 18px; color: var(--red); margin: 0; }
 .notice { font-size: 18px; color: var(--lime); margin: 0; }
 
+/* ---- The author's links -------------------------------------------------- */
+
+.socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.social {
+  --tier: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  font-family: var(--px);
+  font-size: 7px;
+  letter-spacing: 1px;
+  text-decoration: none;
+  color: var(--dim);
+  background: var(--screen-2);
+  border: 1px solid var(--screen-line);
+}
+
+.social img { width: 14px; height: 14px; image-rendering: pixelated; }
+
+.social:hover,
+.social:focus-visible {
+  color: var(--tier);
+  border-color: var(--tier);
+  outline: none;
+}
+
 /* ---- Invite: op code and QR ---------------------------------------------- */
 
 .invite {

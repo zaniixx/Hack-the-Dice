@@ -6,7 +6,7 @@
  * number they get.
  */
 import { DICE } from '../data/dice.js';
-import { WATCHDOG_ABSORB_MAX } from '../data/rules.js';
+import { BOSSES } from '../data/bosses.js';
 import { countPairs, longestStraight } from '../data/combos.js';
 
 /**
@@ -24,13 +24,29 @@ export function applyScoringValues(dice) {
   }
 }
 
-/** AI WATCHDOG eats anything showing 3 or less. */
-export const isAbsorbed = (die, enemy) =>
-  enemy?.boss === 'watchdog' && die.scoringValue <= WATCHDOG_ABSORB_MAX;
+const bossOf = enemy => (enemy && enemy.boss ? BOSSES[enemy.boss] : null);
+
+/** A die the boss refuses to let score at all — AI WATCHDOG eats low ones. */
+export const isAbsorbed = (die, enemy) => !!bossOf(enemy)?.absorbs?.(die);
+
+/**
+ * The dice a boss allows through at all.
+ *
+ * RATE LIMITER narrows this to your best three; most bosses leave it alone.
+ * Both the preview and the execute ask for this, so what the player is shown
+ * is what they get.
+ */
+export const allowedDice = (dice, enemy) => {
+  const boss = bossOf(enemy);
+  return new Set(boss?.scoringDice ? boss.scoringDice(dice) : dice);
+};
 
 /** Dice that will actually score against this enemy. */
-export const eligibleDice = (dice, enemy) =>
-  dice.filter(die => !die.quarantined && !isAbsorbed(die, enemy));
+export function eligibleDice(dice, enemy) {
+  const allowed = allowedDice(dice, enemy);
+  return dice.filter(die =>
+    allowed.has(die) && !die.quarantined && !isAbsorbed(die, enemy));
+}
 
 /** Readable labels for the combos on the board, shown above the dice. */
 export function comboTags(values) {

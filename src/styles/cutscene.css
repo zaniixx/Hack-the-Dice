@@ -1,0 +1,114 @@
+/* The boss cutscene: a protocol introducing itself before the fight. */
+
+.cutscene {
+  --tier: var(--red);
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  cursor: pointer;
+  background:
+    radial-gradient(120% 90% at 50% 40%, color-mix(in srgb, var(--tier) 18%, transparent), transparent 70%),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px),
+    rgba(4, 3, 10, .93);
+}
+
+.cut-panel {
+  width: min(680px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 26px 22px;
+  border: 3px solid var(--tier);
+  background: rgba(7, 6, 15, .92);
+  box-shadow: 0 0 0 3px #000, 0 0 46px color-mix(in srgb, var(--tier) 40%, transparent);
+  animation: cutin .26s steps(4);
+}
+
+/*
+ * Transform and brightness only: never opacity. A panel that depends on an
+ * animation finishing to become visible is a panel that disappears the moment
+ * the browser decides not to run it.
+ */
+@keyframes cutin {
+  0% { transform: scale(1.14) translateY(-10px); filter: brightness(2.4); }
+  60% { transform: scale(.98) translateY(0); filter: brightness(1.1); }
+  100% { transform: none; filter: none; }
+}
+
+.cut-label {
+  font-family: var(--px);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--tier);
+  animation: cutblink 1.1s steps(2) infinite;
+}
+
+@keyframes cutblink { 50% { opacity: .4; } }
+
+.cut-sprite {
+  width: 320px;
+  max-width: 76vw;
+  height: auto;
+  image-rendering: pixelated;
+  border: 2px solid var(--screen-line);
+  background: var(--screen);
+}
+
+.cut-name {
+  position: relative;
+  margin: 0;
+  font-family: var(--px);
+  font-size: clamp(18px, 4.4vw, 32px);
+  line-height: 1.3;
+  color: #fff;
+  text-shadow: 3px 3px 0 #000;
+}
+
+.cut-name::before, .cut-name::after {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  pointer-events: none;
+}
+.cut-name::before { color: var(--cyan); transform: translate(-3px, 0); clip-path: inset(0 0 58% 0); }
+.cut-name::after { color: var(--tier); transform: translate(3px, 0); clip-path: inset(52% 0 0 0); }
+
+.cut-rule {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.1;
+  color: var(--tier);
+  border: 1px dashed var(--tier);
+  padding: 8px 12px;
+}
+
+.cut-line {
+  margin: 0;
+  min-height: 2.2em;
+  font-size: 24px;
+  line-height: 1.1;
+  color: var(--ink);
+  font-style: italic;
+}
+
+.cut-go {
+  font-family: var(--px);
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cut-panel { animation: none; }
+  .cut-label { animation: none; }
+}

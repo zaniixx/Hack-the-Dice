@@ -16,13 +16,16 @@ import { run, Phase } from '../game/state.js';
 import { els } from './dom.js';
 import { isModalOpen, hideModal } from './modal.js';
 import { isStartScreenOpen } from './start-screen.js';
+import { toggleSheet, closeSheet, openSheet, openSheetOf } from './sheets.js';
+import { isCutsceneOpen } from './cutscene.js';
+import { isTouchLayout, toggleFullscreen, canFullscreen } from './viewport.js';
 import { syncSettingsButtons } from './hud.js';
 
 /** Clicking the board rolls, or locks the die under the pointer. */
 function bindBoard(actions) {
   els.boardCanvas.addEventListener('pointerdown', event => {
     initAudio();
-    if (!run) return;
+    if (!run || isCutsceneOpen()) return;
 
     if (run.phase === Phase.READY) {
       actions.roll();
@@ -67,6 +70,25 @@ function bindButtons(actions) {
     }
   };
 
+  // The touch layout's sheets: the toolkit and the console log.
+  els.rigButton.onclick = () => toggleSheet('rig');
+  els.logButton.onclick = () => toggleSheet('log');
+  els.sheetBackdrop.onclick = closeSheet;
+  for (const button of document.querySelectorAll('[data-close-sheet]')) {
+    button.onclick = closeSheet;
+  }
+
+  els.fullscreenButton.onclick = async () => {
+    const entered = await toggleFullscreen();
+    els.fullscreenButton.textContent = entered ? 'EXIT' : 'FULL';
+  };
+  if (!canFullscreen()) els.fullscreenButton.hidden = true;
+
+  // Artifact slots are icon-only on a phone; tapping the row shows them named.
+  els.artifactRow.onclick = () => {
+    if (isTouchLayout()) openSheet('rig');
+  };
+
   els.speedButton.onclick = () => {
     cycleSpeed();
     syncSettingsButtons();
@@ -100,8 +122,14 @@ function bindToolkit(actions) {
 
 function bindKeyboard(actions) {
   addEventListener('keydown', event => {
-    // The start screen has its own keys, and text fields to type into.
-    if (isStartScreenOpen()) return;
+    // The start screen has its own keys, and text fields to type into; a
+    // cutscene swallows everything until it is dismissed.
+    if (isStartScreenOpen() || isCutsceneOpen()) return;
+    // Escape backs out of an open sheet before anything else.
+    if (event.code === 'Escape' && openSheetOf()) {
+      closeSheet();
+      return;
+    }
     if (isModalOpen()) {
       // The title and the run-over screen have no "back" to escape to.
       const dismissible = run.phase !== Phase.TITLE && run.phase !== Phase.OVER;

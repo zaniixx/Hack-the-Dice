@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hack the Dice — poster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../src/styles/tokens.css">
+<style>
+/*
+ * The jam poster, rendered at 1400x1980 (A-series proportions).
+ *
+ * Shoot it with:
+ *   firefox --headless --window-size 1400,1980 --screenshot poster.png \
+ *     "http://localhost:8000/tools/poster.html"
+ *
+ * The art is the game's own: real die sprites and a real boss painter, drawn
+ * onto canvases here, so the poster cannot drift from what the game looks like.
+ */
+:root { color-scheme: dark; }
+
+html, body {
+  margin: 0;
+  width: 1400px;
+  height: 1980px;
+  overflow: hidden;
+  background: #07060f;
+  color: #dfe6ff;
+  font-family: 'VT323', ui-monospace, monospace;
+}
+
+.poster {
+  position: relative;
+  width: 1400px;
+  height: 1980px;
+  padding: 70px 80px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(154,123,255,.20), transparent 68%),
+    repeating-linear-gradient(to bottom, rgba(255,255,255,.022) 0 2px, transparent 2px 6px),
+    #07060f;
+}
+
+.tiers-bar { display: flex; height: 12px; gap: 6px; }
+.tiers-bar i { flex: 1; display: block; }
+
+.masthead { text-align: center; }
+
+.title {
+  position: relative;
+  display: inline-block;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 104px;
+  line-height: 1.22;
+  color: #fff;
+  text-shadow: 7px 7px 0 #000;
+  letter-spacing: 2px;
+}
+.title::before, .title::after {
+  content: attr(data-text);
+  position: absolute; left: 0; top: 0; width: 100%;
+}
+.title::before { color: #3df2ff; transform: translate(-8px, 0); clip-path: inset(0 0 58% 0); }
+.title::after  { color: #ff3df0; transform: translate(8px, 0);  clip-path: inset(52% 0 0 0); }
+
+.tagline {
+  font-size: 40px;
+  color: #9aa0cc;
+  margin: 26px 0 0;
+  letter-spacing: 1px;
+}
+
+.art {
+  position: relative;
+  border: 4px solid #241e42;
+  box-shadow: 0 0 0 4px #000, inset 0 0 90px rgba(61,242,255,.08);
+  background: #07060f;
+  height: 660px;
+  overflow: hidden;
+}
+.art canvas { display: block; image-rendering: pixelated; width: 100%; height: 100%; }
+
+.art .stamp {
+  position: absolute;
+  left: 26px; bottom: 22px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 15px;
+  color: #b6ff3d;
+  text-shadow: 3px 3px 0 #000;
+  letter-spacing: 1px;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.feature {
+  border: 2px solid #241e42;
+  background: #0e0b1c;
+  padding: 18px 16px;
+  text-align: center;
+}
+.feature b {
+  display: block;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 30px;
+  font-weight: normal;
+  color: var(--accent);
+  text-shadow: 3px 3px 0 #000;
+  margin-bottom: 10px;
+}
+.feature span { font-size: 28px; color: #9aa0cc; letter-spacing: 1px; }
+
+.section-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  color: #3df2ff;
+  letter-spacing: 2px;
+  border-bottom: 2px solid #241e42;
+  padding-bottom: 12px;
+}
+
+.bosses { display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px; }
+.boss { text-align: center; }
+.boss canvas {
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  border: 2px solid #241e42;
+  background: #07060f;
+}
+.boss span {
+  display: block;
+  min-height: 46px;
+  margin-top: 10px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #7e83ad;
+}
+
+.tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.tier {
+  border: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, #07060f);
+  padding: 16px;
+}
+.tier b {
+  display: block;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 17px;
+  font-weight: normal;
+  color: var(--accent);
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+.tier span { font-size: 25px; color: #9aa0cc; }
+
+.footer {
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 30px;
+  border-top: 2px solid #241e42;
+  padding-top: 26px;
+}
+.footer .play {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 26px;
+  color: #b6ff3d;
+  text-shadow: 3px 3px 0 #000;
+  letter-spacing: 1px;
+}
+.footer .sub { font-size: 28px; color: #7e83ad; margin-top: 14px; letter-spacing: 1px; }
+.footer .dice { display: flex; gap: 10px; }
+.footer .dice canvas { width: 66px; height: 66px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<div class="poster">
+  <div class="tiers-bar" id="tiersBar"></div>
+
+  <header class="masthead">
+    <div class="title" data-text="HACK THE DICE">HACK THE DICE</div>
+    <p class="tagline">Breach corporate firewalls with a pool of virtual dice.</p>
+  </header>
+
+  <div class="art">
+    <canvas id="keyArt" width="700" height="330"></canvas>
+    <div class="stamp">BITS × MULT = HACKING POWER</div>
+  </div>
+
+  <div class="features" id="features"></div>
+
+  <div class="section-label">EIGHT BOSS PROTOCOLS, EACH BREAKING A DIFFERENT RULE</div>
+  <div class="bosses" id="bosses"></div>
+
+  <div class="section-label">FOUR THREAT LEVELS</div>
+  <div class="tiers" id="tiers"></div>
+
+  <footer class="footer">
+    <div>
+      <div class="play">PLAY IT IN YOUR BROWSER</div>
+      <div class="sub">No install. No account. One HTML file and a folder of modules.</div>
+    </div>
+    <div class="dice" id="footerDice"></div>
+  </footer>
+</div>
+
+<script type="module">
+import { DICE } from '../src/data/dice.js';
+import { BOSSES, BOSS_ORDER } from '../src/data/bosses.js';
+import { DIFFICULTIES, DIFFICULTY_ORDER, difficultySummary } from '../src/data/difficulty.js';
+import { dieSprite } from '../src/render/die-sprites.js';
+import { ENEMY_SPRITES } from '../src/render/enemy-sprites.js';
+import { rand, randInt } from '../src/core/random.js';
+
+/* ---- Key art: the board, as the game draws it, with a boss looming --------- */
+
+const art = document.getElementById('keyArt');
+const ctx = art.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// The same circuit backdrop the board uses.
+ctx.fillStyle = '#07060f';
+ctx.fillRect(0, 0, art.width, art.height);
+ctx.fillStyle = '#120f24';
+for (let x = 6; x < art.width; x += 12) {
+  for (let y = 6; y < art.height; y += 12) ctx.fillRect(x, y, 1, 1);
+}
+const stepX = [1, 0, -1, 0];
+const stepY = [0, 1, 0, -1];
+for (let trace = 0; trace < Math.floor((art.width * art.height) / 1100); trace++) {
+  let x = randInt(0, art.width);
+  let y = randInt(0, art.height);
+  let dir = randInt(0, 3);
+  ctx.fillStyle = Math.random() < 0.18 ? '#241e52' : '#151230';
+  for (let step = 0, len = randInt(10, 46); step < len; step++) {
+    ctx.fillRect(x, y, 1, 1);
+    if (Math.random() < 0.08) dir = (dir + (Math.random() < 0.5 ? 1 : 3)) % 4;
+    x += stepX[dir];
+    y += stepY[dir];
+  }
+  ctx.fillStyle = '#2e2760';
+  ctx.fillRect(x - 1, y - 1, 3, 3);
+}
+
+// The boss, big, off to the right.
+const bossLayer = document.createElement('canvas');
+bossLayer.width = 64;
+bossLayer.height = 48;
+ENEMY_SPRITES.revenant(bossLayer.getContext('2d'), 2.4, '#ff6b86');
+// A faint halo so it separates from the circuit traces behind it.
+const glow = ctx.createRadialGradient(560, 120, 10, 560, 120, 180);
+glow.addColorStop(0, 'rgba(255,77,109,.22)');
+glow.addColorStop(1, 'rgba(255,77,109,0)');
+ctx.fillStyle = glow;
+ctx.fillRect(360, 0, 340, 300);
+ctx.drawImage(bossLayer, 0, 0, 64, 48, 428, 26, 64 * 4.1, 48 * 4.1);
+
+// A hand of dice scattered across the board, with shadows, mid-roll.
+const hand = [['d20', 17], ['virus', 6], ['d6', 5], ['amp', 6], ['qubit', 4], ['d12', 11], ['d6', 6]];
+const spots = [[70, 250], [128, 205], [196, 254], [252, 196], [312, 250], [168, 138], [92, 166]];
+hand.forEach(([type, value], i) => {
+  const [x, y] = spots[i];
+  const scale = 3.6 - (i % 3) * 0.35;
+  ctx.fillStyle = 'rgba(0,0,0,.55)';
+  ctx.fillRect(x - 2, y + 16 * scale - 4, 16 * scale, 6);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rand(-0.16, 0.16));
+  ctx.drawImage(dieSprite(type, value), 0, 0, 16, 16, 0, 0, 16 * scale, 16 * scale);
+  ctx.restore();
+});
+
+// A score flying off the board, as it does on a big hit.
+ctx.font = '44px "Press Start 2P", monospace';
+ctx.fillStyle = '#000';
+ctx.fillText('412K', 394, 312);
+ctx.fillStyle = '#ffc23d';
+ctx.fillText('412K', 390, 308);
+ctx.font = '15px "Press Start 2P", monospace';
+ctx.fillStyle = '#ff3df0';
+ctx.fillText('×18.5 MULT', 392, 332);
+
+// Scanlines over the whole plate, so it reads as a screen.
+ctx.fillStyle = 'rgba(255,255,255,.035)';
+for (let y = 0; y < art.height; y += 3) ctx.fillRect(0, y, art.width, 1);
+
+/* ---- Data-driven panels --------------------------------------------------- */
+
+document.getElementById('tiersBar').innerHTML = DIFFICULTY_ORDER
+  .map(id => `<i style="background:${DIFFICULTIES[id].color}"></i>`).join('');
+
+const FEATURES = [
+  ['8', 'boss protocols', '#ff4d6d'],
+  ['24', 'dice, artifacts and abilities', '#3df2ff'],
+  ['∞', 'seeded runs you can share', '#b6ff3d'],
+  ['1', 'code to run a tournament', '#ffc23d'],
+];
+document.getElementById('features').innerHTML = FEATURES
+  .map(([big, label, color]) =>
+    `<div class="feature" style="--accent:${color}"><b>${big}</b><span>${label}</span></div>`).join('');
+
+document.getElementById('bosses').innerHTML = BOSS_ORDER
+  .map(id => `<div class="boss"><canvas width="64" height="48" data-boss="${id}"></canvas>
+    <span>${BOSSES[id].name}</span></div>`).join('');
+for (const canvas of document.querySelectorAll('[data-boss]')) {
+  const boss = BOSSES[canvas.dataset.boss];
+  const paint = canvas.getContext('2d');
+  paint.fillStyle = '#07060f';
+  paint.fillRect(0, 0, 64, 48);
+  ENEMY_SPRITES[boss.sprite](paint, 1.1 + BOSS_ORDER.indexOf(canvas.dataset.boss) * 0.7, '#3df2ff');
+}
+
+document.getElementById('tiers').innerHTML = DIFFICULTY_ORDER.map(id => {
+  const tier = DIFFICULTIES[id];
+  return `<div class="tier" style="--accent:${tier.color}">
+    <b>${tier.name}</b><span>${difficultySummary(id).slice(0, 3).join(' · ')}</span></div>`;
+}).join('');
+
+document.getElementById('footerDice').innerHTML =
+  ['d6', 'amp', 'virus', 'mirror', 'd20'].map(type => `<canvas width="16" height="16" data-die="${type}"></canvas>`).join('');
+for (const canvas of document.querySelectorAll('[data-die]')) {
+  const type = canvas.dataset.die;
+  const faces = DICE[type].faces;
+  canvas.getContext('2d').drawImage(dieSprite(type, faces === 6 ? 6 : faces), 0, 0);
+}
+</script>
+</body>
+</html>

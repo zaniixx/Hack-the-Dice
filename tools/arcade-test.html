@@ -84,6 +84,8 @@ const { mergeBoard } = await import('../src/ui/live-board.js');
 const { runScore } = await import('../src/game/score.js');
 const { store } = await import('../src/services/store.js');
 const { els } = await import('../src/ui/dom.js');
+const { updateUI } = await import('../src/ui/hud.js');
+const { startTutorial } = await import('../src/ui/tutorial.js');
 
 /** Screen actions are async; give each click a frame to settle. */
 const tick = () => new Promise(resolve => setTimeout(resolve, 60));
@@ -292,6 +294,31 @@ try {
     await store.addTournamentScore(decoded.id, { ...tournamentBoard[0], id: 'other', handle: 'TRINITY' }), true);
   check('board now has both', (await store.listTournamentScores(decoded.id)).length, 2);
 
+  section('First-run tutorial');
+  await store.saveProfile({ ...(await store.getProfile()), tutorialDone: false });
+  session.startNewRun({ handle: 'LEARNER', difficulty: 'pen-tester', seed: 'TUT-1' });
+  startTutorial();
+  await tick();
+  check('it opens on the roll', els.coachTitle.textContent, 'YOUR POOL');
+  check('and it is on screen', els.coach.hidden, false);
+
+  rollDice();
+  settle();
+  check('rolling moves it on', els.coachTitle.textContent, 'KEEP WHAT IS GOOD');
+
+  board.dice[0].locked = true;
+  updateUI();
+  check('locking a die moves it on again', els.coachTitle.textContent, 'COMMIT');
+
+  els.coachSkip.click();
+  await tick();
+  check('skip closes it', els.coach.hidden, true);
+  check('skip is remembered', (await store.getProfile()).tutorialDone, true);
+
+  session.startNewRun({ handle: 'LEARNER', difficulty: 'pen-tester', seed: 'TUT-2' });
+  await tick();
+  check('a returning player never sees it', els.coach.hidden, true);
+
   section('The run-over screen');
   session.startNewRun({ handle: 'MOUSE', difficulty: 'pen-tester' });
   state.run.executes = 1;
@@ -311,7 +338,8 @@ try {
   say(failures ? `${failures} FAILURE(S)` : 'ALL CHECKS PASSED',
     (failures ? 'fail' : 'pass') + ' total');
 } catch (error) {
-  say(`THREW: ${(error && error.stack) || error}`, 'fail');
+  // Firefox leaves the message out of .stack, so print both.
+  say(`THREW: ${error && error.message ? error.message + ' — ' : ''}${(error && error.stack) || error}`, 'fail');
 } finally {
   restoreStorage();
   if (ping) await Promise.all(sent);

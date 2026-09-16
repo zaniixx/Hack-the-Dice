@@ -55,8 +55,8 @@ export const sfx = {
 
   /** Hacking power connecting with the firewall. */
   hit() {
-    noise(0.16, 0.32, 1300);
-    tone(170, 0.16, 'square', 0.1, -110);
+    noise(0.16, 0.46, 1300);
+    tone(170, 0.16, 'square', 0.2, -110);
   },
 
   /** The firewall coming apart. */
@@ -96,5 +96,79 @@ export const sfx = {
   /** Startup jingle. */
   boot() {
     [262, 330, 392, 523, 659].forEach((freq, i) => tone(freq, 0.14, 'square', 0.07, 0, i * 0.07));
+  },
+
+  /* ---- Boss protocols ----------------------------------------------------
+   * Each boss gets a sound of its own, so a rule firing is recognisable
+   * without reading the log. They are called from the boss hooks in
+   * data/bosses.js, through the context game/boss-rules.js hands them.
+   */
+
+  /** A boss coming online: three descending stabs under the alarm. */
+  bossOnline() {
+    [740, 622, 466].forEach((freq, i) => {
+      tone(freq, 0.22, 'sawtooth', 0.2, -60, i * 0.16);
+      tone(freq / 2, 0.3, 'square', 0.13, 0, i * 0.16);
+    });
+    noise(0.5, 0.3, 500, 0.1);
+  },
+
+  /** ANTIVIRUS: a scanner finding something and rejecting it. */
+  quarantine() {
+    noise(0.12, 0.26, 2600, 0, 'bandpass');
+    tone(880, 0.09, 'square', 0.2);
+    tone(392, 0.16, 'square', 0.2, -120, 0.1);
+  },
+
+  /** ENCRYPTION KEY: a shimmer when the cipher breaks, a clank when it holds. */
+  cipher(cracked) {
+    if (cracked) {
+      [523, 659, 784, 1047].forEach((freq, i) => tone(freq, 0.14, 'triangle', 0.18, 0, i * 0.05));
+      return;
+    }
+    tone(180, 0.28, 'square', 0.28, -90);
+    noise(0.22, 0.38, 700, 0.02);
+  },
+
+  /** AI WATCHDOG: a low swallow as a die disappears. */
+  absorb() {
+    tone(260, 0.2, 'sine', 0.3, -170);
+    noise(0.16, 0.24, 380, 0.02, 'lowpass');
+  },
+
+  /** RATE LIMITER: a valve slamming shut on the flow. */
+  throttle() {
+    noise(0.18, 0.34, 1800, 0, 'bandpass');
+    tone(320, 0.12, 'square', 0.24, -200, 0.04);
+    tone(120, 0.14, 'square', 0.2, 0, 0.1);
+  },
+
+  /** PROXY WRAITH: the firewall knitting itself back together. */
+  regen() {
+    [330, 392, 494, 587, 698].forEach((freq, i) =>
+      tone(freq, 0.26, 'triangle', 0.15, 40, i * 0.06));
+    noise(0.4, 0.14, 2400, 0, 'highpass');
+  },
+
+  /** RANSOMWARE VAULT: scrap being counted out of your pocket. */
+  extort() {
+    [988, 784, 659, 523].forEach((freq, i) => tone(freq, 0.09, 'square', 0.19, 0, i * 0.07));
+    tone(90, 0.3, 'sine', 0.3, -30, 0.24);
+  },
+
+  /** SANDBOX: something heavy closing around you. */
+  contain() {
+    tone(200, 0.4, 'square', 0.3, -150);
+    noise(0.35, 0.42, 600, 0, 'lowpass');
+    tone(70, 0.5, 'sine', 0.36, 0, 0.18);
+  },
+
+  /** REVENANT: a rewind, and it stands back up. */
+  restore() {
+    for (let i = 0; i < 6; i++) {
+      tone(180 + i * 90, 0.12, 'sawtooth', 0.17, 120, i * 0.05);
+    }
+    noise(0.5, 0.4, 1200, 0.28);
+    tone(147, 0.5, 'square', 0.26, 60, 0.3);
   },
 };

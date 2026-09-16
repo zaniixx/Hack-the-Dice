@@ -26,6 +26,10 @@ button {
  */
 [hidden] { display: none !important; }
 .px { font-family:var(--px); }
+
+/* Controls that only exist in the touch layout: see mobile.css. */
+.touch-only { display: none; }
+.sheet-backdrop { display: none; }
 #app {
   display:flex;
   flex-direction:column;

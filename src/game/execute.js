@@ -21,8 +21,7 @@ import { sleep, rawSleep } from '../core/time.js';
 import { DICE } from '../data/dice.js';
 import { ARTIFACTS } from '../data/artifacts.js';
 import { EffectType, bits, xMult } from '../data/effects.js';
-import { countPairs } from '../data/combos.js';
-import { CIPHER_DAMAGE_MULTIPLIER, MEMORY_LEAK_RATE } from '../data/rules.js';
+import { MEMORY_LEAK_RATE } from '../data/rules.js';
 import { sfx } from '../audio/sfx.js';
 import { dice, unlockAll } from '../engine/dice-board.js';
 import { flashEnemyHit } from '../render/enemy-view.js';
@@ -31,9 +30,11 @@ import { shakeApp } from '../ui/fx.js';
 import { updateUI, updateFirewall, resetScoreboard } from '../ui/hud.js';
 import { executeView, Source } from '../ui/execute-view.js';
 import { run, Phase, hasArtifact } from './state.js';
-import { applyScoringValues, isAbsorbed } from './scoring.js';
+import { applyScoringValues, isAbsorbed, allowedDice } from './scoring.js';
 import { startLeak, isLeakDraining } from './memory-leak.js';
 import { breachNode, traced } from './session.js';
+import { bossMultipliers, bossAfterExecute, bossSurvivesBreach } from './boss-rules.js';
+import { corpSays } from './voice.js';
 
 /** A hit worth at least this share of the firewall shakes the console. */
 const SHAKE_THRESHOLD = 0.15;
@@ -116,34 +117,43 @@ async function runArtifactPhase(tally, hook, pause) {
   }
 }
 
-/** ENCRYPTION KEY: without a pair, 90% of the payload is absorbed. */
-async function applyCipherShield(tally) {
-  if (countPairs(tally.scored.map(die => die.scoringValue))) {
-    executeView.announceEnemy('CIPHER CRACKED');
-    log('> pair detected: cipher shield bypassed', 'lime');
-  } else {
-    const label = `CIPHER ×${CIPHER_DAMAGE_MULTIPLIER}`;
-    applyEffect(tally, xMult(CIPHER_DAMAGE_MULTIPLIER, label), Source.enemy());
-    log('> no pair: cipher shield absorbs 90%', 'red');
+/** Whatever the boss protocol does to the finished payload. */
+async function applyBossRule(tally) {
+  const effects = bossMultipliers(tally);
+  for (const effect of effects) {
+    applyEffect(tally, effect, Source.enemy());
+    await sleep(260);
   }
-  await sleep(260);
+  if (effects.length) await sleep(120);
 }
 
 /** Score every die on the board, skipping the ones the boss took out. */
+/** The boss's own sound for turning a die away. */
+const REFUSAL_SOUND = {
+  QUARANTINED: () => sfx.quarantine(),
+  ABSORBED: () => sfx.absorb(),
+  'RATE LIMITED': () => sfx.throttle(),
+};
+
+/** Why a die is not allowed to score, or null when it is. */
+function refusalFor(die, enemy, allowed) {
+  if (die.quarantined) return 'QUARANTINED';
+  if (isAbsorbed(die, enemy)) return 'ABSORBED';
+  if (!allowed.has(die)) return 'RATE LIMITED';
+  return null;
+}
+
 async function scoreBoard(tally, enemy) {
   let index = 0;
+  const allowed = allowedDice(dice, enemy);
+
   // Left to right, so the payout reads in the order the dice are laid out.
   for (const die of [...dice].sort((a, b) => a.x - b.x)) {
-    if (die.quarantined) {
-      executeView.rejectDie(die, 'QUARANTINED');
-      sfx.buzz();
-      await sleep(280);
-      continue;
-    }
-    if (isAbsorbed(die, enemy)) {
-      executeView.rejectDie(die, 'ABSORBED');
-      sfx.buzz();
-      await sleep(240);
+    const refusal = refusalFor(die, enemy, allowed);
+    if (refusal) {
+      executeView.rejectDie(die, refusal);
+      REFUSAL_SOUND[refusal]();
+      await sleep(refusal === 'QUARANTINED' ? 280 : 240);
       continue;
     }
     tally.scored.push(die);
@@ -180,6 +190,11 @@ async function landPayload(tally, enemy) {
   executeView.showDamage(total);
   updateFirewall();
   log(`> ${fmt(tally.bits)} bits × ${fmtM(tally.mult)} mult = ${fmt(total)} hacking power`, 'amber');
+
+  // The corp has opinions about how that went.
+  const share = total / Math.max(1, enemy.max);
+  if (share < 0.05) corpSays('weak', { always: false });
+  else if (share >= 0.35) corpSays('hurt', { always: false });
 
   return total;
 }
@@ -220,12 +235,22 @@ async function resolveExecute() {
     applyEffect(tally, xMult(2, 'OVERDRIVE ×2'), Source.abilities());
     await sleep(260);
   }
-  if (enemy.boss === 'encryption') await applyCipherShield(tally);
+  if (enemy.boss) await applyBossRule(tally);
 
   // Every effect has to have landed before the totals mean anything.
   await Promise.all(tally.pending);
 
   const total = await landPayload(tally, enemy);
+
+  // A boss gets the last word on its own firewall: PROXY WRAITH rebuilds it,
+  // REVENANT refuses the killing blow once.
+  bossAfterExecute();
+  const clungOn = bossSurvivesBreach();
+  if (clungOn) {
+    shakeApp();
+    executeView.announceEnemy('RESTORED', 'c-red');
+  }
+  updateFirewall();
 
   run.firstExecute = false;
   run.overdrive = false;

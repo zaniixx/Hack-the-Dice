@@ -12,6 +12,8 @@
 import { fmt } from '../core/format.js';
 import { DEFAULT_DIFFICULTY, isKnownDifficulty } from '../data/difficulty.js';
 import { MAX_SEED_LENGTH, normaliseSeed } from '../core/game-random.js';
+import { activeLinks } from '../data/links.js';
+import { iconURL } from '../render/icon-sprites.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
 import { store } from '../services/store.js';
@@ -76,6 +78,22 @@ const root = () => els.start;
 
 // ---- Views ------------------------------------------------------------------
 
+/**
+ * The author's links, or nothing at all.
+ *
+ * These leave the game, so they open in a new tab and drop the referrer.
+ */
+function socialsHTML() {
+  const links = activeLinks();
+  if (!links.length) return '';
+
+  return `<div class="socials">${links.map(link => `
+    <a class="social" href="${link.url}" target="_blank" rel="noopener noreferrer"
+       style="--tier:${link.color}">
+      <img src="${iconURL(link.id, link.color)}" alt=""><span>${link.label}</span>
+    </a>`).join('')}</div>`;
+}
+
 function homeHTML() {
   const best = ctx.best && ctx.best.server
     ? `<div class="kv">Personal best: <b>server ${ctx.best.server}, node ${ctx.best.node}</b></div>`
@@ -128,6 +146,8 @@ function homeHTML() {
       <button class="btn" data-action="view:tournaments">TOURNAMENTS</button>
       <button class="btn sm" data-action="view:how">HOW TO HACK</button>
     </div>
+
+    ${socialsHTML()}
 
     <p class="start-foot">Everything runs in your browser. Scores and tournaments are kept on
       this device — tournament codes carry the rules to other machines.</p>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Hack the Dice — fit test</title>
+<style>
+  #fit {
+    position: fixed; inset: 0; z-index: 9999; overflow: auto;
+    background: #000000cc; color: #dfe6ff;
+    font: 12px/1.5 ui-monospace, monospace; padding: 8px;
+  }
+  #fit .ok { color: #b6ff3d; }
+  #fit .no { color: #ff4d6d; font-weight: bold; }
+  #fit h1 { font-size: 13px; color: #3df2ff; margin: 0 0 6px; }
+</style>
+</head>
+<body>
+<script type="module">
+/*
+ * Checks that the game fits the window it is given, with nothing scrolling and
+ * nothing important pushed off screen.
+ *
+ * This is a layout test, so the window size is the input: open it on a phone,
+ * or resize the browser, or shoot it headless at a size —
+ *
+ *   firefox --headless --window-size 390,844 --screenshot /tmp/fit.png \
+ *     "http://localhost:8000/tools/fit-test.html"
+ *
+ * The touch layout it exercises starts below 1120px wide; above that the report
+ * simply describes the desktop layout instead.
+ */
+const page = await (await fetch('../index.html')).text();
+document.head.insertAdjacentHTML('beforeend',
+  [...page.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)]
+    .map(m => `<link rel="stylesheet" href="../${m[1]}">`).join(''));
+document.body.insertAdjacentHTML('afterbegin', page.split('<body>')[1].split('<script')[0]);
+
+await import('../src/main.js');
+
+const { startNewRun } = await import('../src/game/session.js');
+const { closeStartScreen } = await import('../src/ui/start-screen.js');
+const { openSheet, closeSheet } = await import('../src/ui/sheets.js');
+const { isTouchLayout } = await import('../src/ui/viewport.js');
+const { els } = await import('../src/ui/dom.js');
+
+// The boot opens the start screen; this test is about the game behind it.
+closeStartScreen();
+new MutationObserver(() => { if (!els.start.hidden) els.start.hidden = true; })
+  .observe(els.start, { attributes: true, attributeFilter: ['hidden'] });
+
+// Measure end states, not animations.
+document.head.insertAdjacentHTML('beforeend',
+  '<style>*{transition:none!important;animation:none!important}</style>');
+
+startNewRun({ handle: 'FIT', difficulty: 'pen-tester', seed: 'FIT-1' });
+
+const out = document.createElement('div');
+out.id = 'fit';
+document.body.appendChild(out);
+
+let failures = 0;
+const H = innerHeight;
+const box = el => el.getBoundingClientRect();
+const line = (label, ok, detail = '') => {
+  if (!ok) failures++;
+  out.insertAdjacentHTML('beforeend',
+    `<div class="${ok ? 'ok' : 'no'}">${ok ? 'OK  ' : 'BAD '}${label}${detail ? ' — ' + detail : ''}</div>`);
+};
+
+out.insertAdjacentHTML('beforeend',
+  `<h1>${innerWidth}×${H} · ${isTouchLayout() ? 'touch layout' : 'desktop layout'}</h1>`);
+
+const app = document.getElementById('app');
+line('page does not scroll',
+  document.documentElement.scrollHeight <= H + 1 && document.body.scrollHeight <= H + 1,
+  `document ${document.documentElement.scrollHeight}px, body ${document.body.scrollHeight}px`);
+line('the app fits the viewport', Math.round(box(app).height) <= H + 1, `${Math.round(box(app).height)}px`);
+line('the board has room', box(els.boardCanvas).height >= 110,
+  `${Math.round(box(els.boardCanvas).width)}×${Math.round(box(els.boardCanvas).height)}`);
+line('roll button is on screen', box(els.rollButton).bottom <= H + 1);
+line('abilities are on screen', box(els.abilityBar).bottom <= H + 1);
+line('the firewall is on screen', box(els.firewallBar).bottom <= H + 1);
+line('the artifact row is on screen', box(els.artifactRow).bottom <= H + 1);
+
+if (isTouchLayout()) {
+  line('the toolkit is parked off screen', box(els.toolkit).top >= H - 4,
+    `top ${Math.round(box(els.toolkit).top)}`);
+  line('the log is parked off screen', box(els.log).top >= H - 4,
+    `top ${Math.round(box(els.log).top)}`);
+
+  openSheet('rig');
+  line('the rig sheet slides in', box(els.toolkit).top < H - 60,
+    `top ${Math.round(box(els.toolkit).top)}`);
+  line('it fits on screen', box(els.toolkit).bottom <= H + 1);
+  line('a backdrop covers the game', !els.sheetBackdrop.hidden);
+
+  openSheet('log');
+  line('the log sheet slides in', box(els.log).top < H - 60, `top ${Math.round(box(els.log).top)}`);
+
+  closeSheet();
+  line('sheets close again', els.sheetBackdrop.hidden && box(els.toolkit).top >= H - 4);
+  line('the touch buttons are shown', getComputedStyle(els.rigButton).display !== 'none');
+} else {
+  line('the toolkit is a column, not a sheet', box(els.toolkit).top < H);
+  line('the touch buttons are hidden', getComputedStyle(els.rigButton).display === 'none');
+}
+
+out.insertAdjacentHTML('beforeend',
+  `<h1 class="${failures ? 'no' : 'ok'}">${failures ? failures + ' PROBLEM(S)' : 'FITS'}</h1>`);
+if (location.search.includes('ping')) {
+  await fetch('/__t/' + encodeURIComponent(
+    `${innerWidth}x${H} ${isTouchLayout() ? 'touch' : 'desktop'}: ${failures ? failures + ' PROBLEM(S)' : 'FITS'}`))
+    .catch(() => {});
+}
+</script>
+</body>
+</html>

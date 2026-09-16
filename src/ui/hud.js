@@ -11,7 +11,8 @@ import { settings } from '../core/settings.js';
 import { clamp } from '../core/math.js';
 import { ARTIFACTS } from '../data/artifacts.js';
 import { ABILITIES } from '../data/abilities.js';
-import { BOSSES, corpName } from '../data/enemies.js';
+import { BOSSES } from '../data/bosses.js';
+import { corpName } from '../data/corps.js';
 import { difficultyOf } from '../data/difficulty.js';
 import {
   MAX_ARTIFACTS, MAX_ABILITIES, BOSS_NODE, NODES_PER_SERVER, SHOP_REFRESH_BASE_COST,
@@ -23,6 +24,9 @@ import { loadBest } from '../game/save.js';
 import { renderShop } from './shop-view.js';
 import { renderInventory } from './inventory-view.js';
 import { els } from './dom.js';
+import { syncSheetsToPhase } from './sheets.js';
+import { syncSoundtrack } from '../game/soundtrack.js';
+import { syncTutorial } from './tutorial.js';
 
 /** One line of guidance per phase, shown under the board. */
 const HINTS = {
@@ -219,6 +223,9 @@ export function updateUI() {
   renderShop();
   renderInventory();
   renderShopControls(phase);
+  syncSheetsToPhase(phase);
+  syncSoundtrack(run);
+  syncTutorial();
 }
 
 /** Reflect the current settings on the two top-bar toggles. */
