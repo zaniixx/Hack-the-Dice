@@ -84,7 +84,7 @@ export function showRunOverScreen({
     ${isBest ? '<p class="newbest">New personal best</p>' : ''}`,
     [
       { text: 'VIEW BOARD', cls: 'lime', fn: onLeaderboard },
-      { text: 'JACK IN AGAIN', cls: 'cyan', fn: onRestart },
+      { text: 'LOCK IN AGAIN', cls: 'cyan', fn: onRestart },
     ]);
 }
 

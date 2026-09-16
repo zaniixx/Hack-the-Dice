@@ -140,7 +140,7 @@ function homeHTML() {
     </div>
 
     <div class="start-actions">
-      <button class="btn lime big" data-action="start">JACK IN</button>
+      <button class="btn lime big" data-action="start">LOCK IN</button>
       ${resume}
       <button class="btn" data-action="view:leaderboard">LEADERBOARD</button>
       <button class="btn" data-action="view:tournaments">TOURNAMENTS</button>
@@ -167,7 +167,7 @@ async function leaderboardHTML() {
       the threat level you ran.</p>
     ${difficultyTabsHTML(boardFilter)}
     ${boardHTML(entries, {
-      empty: 'Nothing on this board yet. Jack in and put something on it.',
+      empty: 'Nothing on this board yet. LOCK IN and put something on it.',
       showTier: boardFilter === 'all',
       highlight: lastResult && lastResult.id,
     })}
