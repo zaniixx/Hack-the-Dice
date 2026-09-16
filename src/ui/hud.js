@@ -12,6 +12,7 @@ import { clamp } from '../core/math.js';
 import { ARTIFACTS } from '../data/artifacts.js';
 import { ABILITIES } from '../data/abilities.js';
 import { BOSSES, corpName } from '../data/enemies.js';
+import { difficultyOf } from '../data/difficulty.js';
 import {
   MAX_ARTIFACTS, MAX_ABILITIES, BOSS_NODE, NODES_PER_SERVER, SHOP_REFRESH_BASE_COST,
 } from '../data/rules.js';
@@ -140,6 +141,14 @@ function renderMeters(phase) {
 }
 
 function renderTopBar() {
+  const tier = difficultyOf(run.difficulty);
+  els.handle.textContent = run.handle || '—';
+  els.tier.textContent = tier.name;
+  els.tier.style.color = tier.color;
+
+  els.tournamentWrap.hidden = !run.tournament;
+  if (run.tournament) els.tournament.textContent = run.tournament.name;
+
   els.server.textContent = run.server;
   els.corp.textContent = corpName(run.server);
   els.node.textContent = `${Math.min(run.node, NODES_PER_SERVER)}/${NODES_PER_SERVER}`;

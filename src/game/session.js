@@ -31,7 +31,7 @@ import { fly, centerOf, bump, shakeApp, flashAlarm, clearAlarm } from '../ui/fx.
 import { updateUI, resetScoreboard, setEnemyOverlay } from '../ui/hud.js';
 import { hideModal } from '../ui/modal.js';
 import { showMenuScreen, showMigrationScreen, showTracedScreen } from '../ui/screens.js';
-import { openStartScreen } from '../ui/start-screen.js';
+import { openStartScreen, rememberResult } from '../ui/start-screen.js';
 import { run, Phase, createRun, hasArtifact, isBusy } from './state.js';
 import { saveRun, loadSavedRun, clearSavedRun, loadBest, recordBest } from './save.js';
 import { openShop, generateShop } from './shop.js';
@@ -210,7 +210,9 @@ export async function traced() {
  */
 async function bankRun(reason) {
   log(`> run banked: ${fmt(runScore(run))} points for ${run.handle}`, 'amber');
-  return submitRun(run, { reason });
+  const result = await submitRun(run, { reason });
+  rememberResult(result.entry); // so the player can hand its code to a host
+  return result;
 }
 
 /** The run-over screen, with where the score placed. */
