@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>404 — Hack the Dice</title>
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/styles/tokens.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--screen); color: var(--ink);
+               font-family: var(--vt), ui-monospace, monospace; }
+  main { min-height: 100%; display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 18px; padding: 24px; text-align: center;
+         background: repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); }
+  h1 { font-family: var(--px); font-size: clamp(28px, 9vw, 64px); margin: 0; color: var(--red);
+       text-shadow: 4px 4px 0 #000; }
+  p { font-size: 24px; color: var(--dim); margin: 0; max-width: 34em; line-height: 1.15; }
+  a { font-family: var(--px); font-size: 12px; letter-spacing: 1px; text-decoration: none;
+      color: var(--lime); border: 2px solid var(--lime); padding: 14px 18px; box-shadow: 0 4px 0 #000; }
+  a:hover { filter: brightness(1.3); }
+</style>
+</head>
+<body>
+<main>
+  <h1>404</h1>
+  <p>That node is not on this server. The address was mistyped, or whatever was here has been
+     quarantined.</p>
+  <a href="/">BACK TO THE DICE</a>
+</main>
+</body>
+</html>

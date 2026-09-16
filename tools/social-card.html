@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hack the Dice — social card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+/*
+ * The 1200x630 card link previews use. Shoot it with:
+ *   firefox --headless --window-size 1200,630 --screenshot assets/social-card.png \
+ *     "http://localhost:8000/tools/social-card.html"
+ */
+html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #07060f; }
+.card {
+  position: relative; width: 1200px; height: 630px;
+  font-family: 'VT323', ui-monospace, monospace; color: #dfe6ff;
+  background:
+    radial-gradient(110% 80% at 70% 30%, rgba(255,77,109,.18), transparent 65%),
+    radial-gradient(90% 70% at 15% 80%, rgba(61,242,255,.14), transparent 70%),
+    #07060f;
+}
+canvas { position: absolute; inset: 0; width: 1200px; height: 630px; image-rendering: pixelated; }
+.plate { position: absolute; inset: 0; padding: 54px 60px; display: flex; flex-direction: column; justify-content: center; }
+.title {
+  position: relative; display: inline-block; align-self: flex-start;
+  font-family: 'Press Start 2P', monospace; font-size: 76px; line-height: 1.28;
+  color: #fff; text-shadow: 6px 6px 0 #000;
+}
+.title::before, .title::after { content: attr(data-text); position: absolute; left: 0; top: 0; width: 100%; }
+.title::before { color: #3df2ff; transform: translate(-6px,0); clip-path: inset(0 0 56% 0); }
+.title::after { color: #ff3df0; transform: translate(6px,0); clip-path: inset(50% 0 0 0); }
+.tag { font-size: 34px; color: #aab0d6; margin-top: 22px; letter-spacing: 1px; max-width: 640px; line-height: 1.15; }
+.bullets { display: flex; gap: 14px; margin-top: 30px; }
+.bullets span {
+  font-family: 'Press Start 2P', monospace; font-size: 13px; letter-spacing: 1px;
+  border: 2px solid var(--c); color: var(--c); padding: 10px 12px; background: rgba(7,6,15,.75);
+}
+.host { position: absolute; left: 60px; bottom: 44px; font-family: 'Press Start 2P', monospace; font-size: 16px; color: #b6ff3d; text-shadow: 3px 3px 0 #000; }
+.bar { position: absolute; left: 0; right: 0; bottom: 0; height: 10px; display: flex; }
+.bar i { flex: 1; }
+</style>
+</head>
+<body>
+<div class="card">
+  <canvas id="art" width="600" height="315"></canvas>
+  <div class="plate">
+    <div class="title" data-text="HACK THE">HACK THE</div>
+    <div class="title" data-text="DICE">DICE</div>
+    <p class="tag">Breach corporate firewalls with a pool of virtual dice.</p>
+    <div class="bullets">
+      <span style="--c:#ff4d6d">8 BOSS PROTOCOLS</span>
+      <span style="--c:#3df2ff">4 THREAT LEVELS</span>
+      <span style="--c:#b6ff3d">SEEDED RUNS</span>
+    </div>
+  </div>
+  <div class="host">hackthedice.zanix.tech</div>
+  <div class="bar" id="bar"></div>
+</div>
+
+<script type="module">
+import { dieSprite } from '../src/render/die-sprites.js';
+import { ENEMY_SPRITES } from '../src/render/enemy-sprites.js';
+import { DIFFICULTIES, DIFFICULTY_ORDER } from '../src/data/difficulty.js';
+import { rand, randInt } from '../src/core/random.js';
+
+const art = document.getElementById('art');
+const ctx = art.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// The board's circuit backdrop, drawn the same way the game draws it.
+ctx.fillStyle = '#07060f';
+ctx.fillRect(0, 0, art.width, art.height);
+ctx.fillStyle = '#120f24';
+for (let x = 6; x < art.width; x += 12) for (let y = 6; y < art.height; y += 12) ctx.fillRect(x, y, 1, 1);
+const stepX = [1, 0, -1, 0], stepY = [0, 1, 0, -1];
+for (let i = 0; i < 70; i++) {
+  let x = randInt(0, art.width), y = randInt(0, art.height), dir = randInt(0, 3);
+  ctx.fillStyle = Math.random() < 0.18 ? '#241e52' : '#151230';
+  for (let step = 0, len = randInt(8, 40); step < len; step++) {
+    ctx.fillRect(x, y, 1, 1);
+    if (Math.random() < 0.08) dir = (dir + (Math.random() < 0.5 ? 1 : 3)) % 4;
+    x += stepX[dir]; y += stepY[dir];
+  }
+  ctx.fillStyle = '#2e2760';
+  ctx.fillRect(x - 1, y - 1, 3, 3);
+}
+
+// A boss looming on the right, and dice tumbling under it.
+const plate = document.createElement('canvas');
+plate.width = 64; plate.height = 48;
+ENEMY_SPRITES.revenant(plate.getContext('2d'), 2.4, '#ff6b86');
+ctx.drawImage(plate, 0, 0, 64, 48, 400, 24, 64 * 2.6, 48 * 2.6);
+
+[['d20', 17, 372, 196], ['amp', 6, 436, 232], ['virus', 6, 500, 200], ['d12', 11, 548, 244], ['qubit', 5, 330, 244]]
+  .forEach(([type, value, x, y]) => {
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(x - 2, y + 44, 46, 5);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rand(-0.14, 0.14));
+    ctx.drawImage(dieSprite(type, value), 0, 0, 16, 16, 0, 0, 48, 48);
+    ctx.restore();
+  });
+
+ctx.fillStyle = 'rgba(255,255,255,.04)';
+for (let y = 0; y < art.height; y += 3) ctx.fillRect(0, y, art.width, 1);
+
+document.getElementById('bar').innerHTML = DIFFICULTY_ORDER
+  .map(id => `<i style="background:${DIFFICULTIES[id].color}"></i>`).join('');
+</script>
+</body>
+</html>

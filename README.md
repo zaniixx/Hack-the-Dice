@@ -179,8 +179,10 @@ src/
   ui/                   the DOM: hud, log, fx, modals, screens, input, viewport,
                         sheets, tutorial, and the start screen with its
                         leaderboard, live board and tournament views
-tools/                  test pages, plus the press tools: poster.html,
-                        trailer.html, capture_server.py, trailer-music.py
+assets/                 favicons and the social card the site links to
+tools/                  test pages, a no-cache dev server, and the press tools:
+                        poster.html, trailer.html, social-card.html, icon.html,
+                        capture_server.py, trailer-music.py
 ```
 
 ## Architecture
@@ -305,6 +307,38 @@ saves still load — they simply resume on the default threat level. A save
 records the rig and how far the run got, never a node in progress, so reloading
 mid-node restarts that node rather than rerolling a bad hand. Anything in a save
 the catalogs no longer recognise is dropped on load rather than breaking it.
+
+## Hosting
+
+The game is live at **https://hackthedice.zanix.tech**, published from `main` by
+[.github/workflows/pages.yml](.github/workflows/pages.yml). The repository is
+the site — there is no build step — so the workflow uploads the checkout as-is
+and GitHub Pages serves it. `CNAME` holds the custom domain and `.nojekyll`
+keeps GitHub from running the files through Jekyll.
+
+Three things had to be true once, and stay true:
+
+1. **DNS.** A `CNAME` record for `hackthedice` pointing at `zaniixx.github.io.`
+2. **Repository settings.** Settings → Pages → Source: **GitHub Actions**, with
+   the custom domain set to `hackthedice.zanix.tech` and *Enforce HTTPS* ticked
+   once the certificate is issued.
+3. **The `CNAME` file stays in the repo root.** Deleting it unsets the domain on
+   the next deploy.
+
+Being on a real domain is what makes the tournament QR codes work off a local
+network: a scanned code opens `https://hackthedice.zanix.tech/#join=…` on any
+phone, anywhere, and the rules travel with it.
+
+`press/` is gitignored, so the trailer and poster are not published with the
+site — they belong on the jam page. Remove `/press` from `.gitignore` if you
+want to link them directly.
+
+### After a deploy
+
+GitHub Pages sends `Cache-Control: max-age=600`, so a browser that was on the
+site within ten minutes of a deploy can end up holding a mix of old and new
+modules. The page catches that and says so rather than showing a black screen;
+a hard refresh clears it.
 
 ## Press kit
 
