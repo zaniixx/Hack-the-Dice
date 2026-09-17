@@ -74,12 +74,8 @@ const fakeBoard = installFakeBoard();
 localStorage.setItem('htd_api_base', FAKE_BOARD_URL);
 
 // Boot the real page: its markup, its stylesheets, its entry point.
-const page = await (await fetch('../index.html')).text();
-const markup = page.split('<body>')[1].split('<script')[0];
-document.head.insertAdjacentHTML('beforeend',
-  [...page.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)]
-    .map(m => `<link rel="stylesheet" href="../${m[1]}">`).join(''));
-document.body.insertAdjacentHTML('beforeend', markup);
+const { mountRealPage } = await import('./boot-page.js');
+const mounted = await mountRealPage();
 
 await import('../src/main.js');
 
@@ -118,6 +114,15 @@ try {
   section('A node, start to finish');
   const { API_BASE } = await import('../src/services/config.js');
   check('this suite is on its own board, not the real one', API_BASE, FAKE_BOARD_URL);
+  /*
+   * And on the real page. A suite that mounts nothing still runs, and reports
+   * nothing, which reads as a passing suite from a distance — so the console
+   * being here is a check like any other.
+   */
+  check('the real console is mounted, stylesheets and all',
+    [mounted.stylesheets > 0, !!document.getElementById('app'), !!document.getElementById('start'),
+      !!document.getElementById('boot')],
+    [true, true, true, false]);
 
   check('starts at the title', state.run.phase, 'title');
   startNewRun();

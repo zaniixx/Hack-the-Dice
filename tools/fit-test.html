@@ -30,11 +30,8 @@
  * The touch layout it exercises starts below 1120px wide; above that the report
  * simply describes the desktop layout instead.
  */
-const page = await (await fetch('../index.html')).text();
-document.head.insertAdjacentHTML('beforeend',
-  [...page.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)]
-    .map(m => `<link rel="stylesheet" href="../${m[1]}">`).join(''));
-document.body.insertAdjacentHTML('afterbegin', page.split('<body>')[1].split('<script')[0]);
+const { mountRealPage } = await import('./boot-page.js');
+await mountRealPage({ position: 'afterbegin' });
 
 await import('../src/main.js');
 

@@ -111,7 +111,19 @@ function onContainerResize() {
   });
 }
 
-function start() {
+/**
+ * Everything here measures the page it is about to draw into — the board canvas
+ * sizes itself from its container, and the tray lays dice out to fit. So the
+ * stylesheets have to be applied before any of it runs.
+ *
+ * index.html loads them without blocking the first paint, so that the boot
+ * screen can be up while they arrive, and hands back a promise for when they
+ * are in. Opened some other way, with no boot screen to ask, this resolves at
+ * once and the browser's own blocking behaviour has already done the waiting.
+ */
+async function start() {
+  await window.__htdBoot?.styles;
+
   // Before anything measures itself: the layout depends on --app-height.
   trackViewportHeight();
   blockZoomGestures();
@@ -150,8 +162,20 @@ function start() {
   requestAnimationFrame(frame);
   showTitle();
 
-  // Tells the boot-error reporter in index.html to stand down.
+  // Tells the boot-error reporter in index.html to stand down, and the boot
+  // screen that there is a game behind it now.
   window.__htdBooted = true;
+  window.__htdBoot?.done();
 }
 
-start();
+/*
+ * Waiting for the stylesheets makes start() a promise, and a promise that
+ * rejects on its own is a silent failure — the boot reporter in index.html
+ * listens for errors. Rethrowing outside the promise puts a failed boot back in
+ * front of it, with its message intact.
+ */
+start().catch(error => {
+  setTimeout(() => {
+    throw error;
+  });
+});
