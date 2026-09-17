@@ -9,7 +9,6 @@
  * The screen never touches game state. It is handed `onStart` and `onResume`
  * and calls them with what the player chose.
  */
-import { fmt } from '../core/format.js';
 import { DEFAULT_DIFFICULTY, isKnownDifficulty } from '../data/difficulty.js';
 import { MAX_SEED_LENGTH, normaliseSeed } from '../core/game-random.js';
 import { activeLinks, activeProjectLinks } from '../data/links.js';
@@ -19,7 +18,7 @@ import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
 import { store } from '../services/store.js';
 import {
-  createTournament, decodeTournament, decodeResult, encodeResult, setActiveTournament, isOpCode,
+  createTournament, decodeTournament, setActiveTournament, isOpCode,
 } from '../game/tournament.js';
 import { topScores, tournamentScores } from '../game/leaderboard.js';
 import { els } from './dom.js';
@@ -201,13 +200,10 @@ async function tournamentDetailView() {
     tournamentScores(openTournament.id),
     store.listLiveRuns(openTournament.id),
   ]);
-  const mine = lastResult && lastResult.tournament === openTournament.id
-    ? encodeResult(lastResult)
-    : null;
-
   return `<div class="start-inner">
     ${tournamentDetailHTML(openTournament, mergeBoard(finished, live), {
-      lastResult: mine,
+      handle: draft.handle,
+      maxHandle: MAX_HANDLE,
       notice,
       highlight: lastResult && lastResult.id,
     })}
@@ -413,23 +409,6 @@ async function tournamentFromHash() {
   return tournament;
 }
 
-async function mergeResult(id) {
-  const entry = decodeResult(root().querySelector('#mergeCode').value);
-  if (!entry) {
-    notice = 'That is not a result code. They start with HTDR1-.';
-    sfx.buzz();
-  } else if (entry.tournament !== id) {
-    notice = 'That result was scored in a different tournament.';
-    sfx.buzz();
-  } else {
-    const added = await store.addTournamentScore(id, entry);
-    notice = added
-      ? `Merged ${entry.handle}: ${fmt(entry.score)} points.`
-      : `${entry.handle} was already on this board.`;
-    if (added) sfx.coin();
-  }
-  await render();
-}
 
 /** Copy text, falling back to selecting it when the clipboard is blocked. */
 async function copyFrom(selector, label) {
@@ -527,12 +506,6 @@ async function onClick(event) {
     case 'copy-code':
       await copyTournamentCode(argument);
       break;
-    case 'copy-result':
-      await copyFrom('#resultCode', 'RESULT');
-      break;
-    case 'merge-result':
-      await mergeResult(argument);
-      break;
     case 'delete-tournament':
       await store.deleteTournament(argument);
       openTournament = null;
@@ -542,12 +515,13 @@ async function onClick(event) {
   }
 }
 
-/** Enter starts the run from the handle field. */
+/** Enter starts the run from the handle field — whichever screen it is on. */
 function onKeydown(event) {
   if (event.key !== 'Enter') return;
   if (event.target.id === 'handleInput') {
     event.preventDefault();
-    beginRun(null);
+    // The same field appears on a tournament, where it starts that tournament.
+    beginRun(view === 'tournament' ? openTournament : null);
   } else if (event.target.id === 'joinCode') {
     event.preventDefault();
     joinFromCode();

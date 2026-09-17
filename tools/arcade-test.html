@@ -87,7 +87,7 @@ const { settings } = await import('../src/core/settings.js');
 const { rollDice, onDiceSettled } = await import('../src/game/turn.js');
 const { generateShop } = await import('../src/game/shop.js');
 const { executePayload } = await import('../src/game/execute.js');
-const { decodeTournament, decodeResult, encodeResult, isAllowed, tournamentRules } = await import('../src/game/tournament.js');
+const { decodeTournament, isAllowed, tournamentRules } = await import('../src/game/tournament.js');
 const { publish: publishLiveRun } = await import('../src/game/live-run.js');
 const { mergeBoard } = await import('../src/ui/live-board.js');
 const { runScore } = await import('../src/game/score.js');
@@ -392,19 +392,41 @@ try {
   check('the board stays sorted by score',
     merged.every((row, i) => i === 0 || merged[i - 1].score >= row.score), true);
 
-  section('Carrying results between devices');
+  section('Setting your name from the lobby');
+  await click('[data-action="view:tournaments"]'); await tick();
+  await click('[data-action^="open-tournament"]'); await tick();
+
+  const lobbyHandle = els.start.querySelector('#handleInput');
+  check('the lobby has a handle field', !!lobbyHandle, true);
+  check('carrying the name already signed in with', lobbyHandle.value, 'SEEDER');
+  check('and nothing to copy or paste a result with',
+    !!els.start.querySelector('#resultCode, #mergeCode'), false);
+  check('nor a merge button',
+    !!els.start.querySelector('[data-action^="merge-result"], [data-action="copy-result"]'), false);
+  check('the invite code is folded away, not gone',
+    !!els.start.querySelector('details.raw-code #tournamentCode'), true);
+
+  // A name typed here is the name the run is played under.
+  lobbyHandle.value = 'lobbyname';
+  await click('[data-action^="play-tournament"]'); await tick();
+  check('the run took the name typed in the lobby', state.run.handle, 'LOBBYNAME');
+  check('and is in that tournament', state.run.tournament.id, decoded.id);
+
+  section('Results reach the board on their own');
+  // Result codes used to carry a run to the host by hand, because each device
+  // kept its own board. The board is shared now, so banking a run is all there
+  // is to it — and there is nothing left on screen to copy or paste.
   state.run.stats.nodes = 2;
   await session.abandonRun();
   await tick();
   const tournamentBoard = await store.listTournamentScores(decoded.id);
-  check('tournament board recorded the run', tournamentBoard.length, 1);
+  check('the tournament board recorded the run', tournamentBoard.length, 1);
   check('the lobby emptied when the run ended', (await store.listLiveRuns(decoded.id)).length, 0);
-  check('result code round trips', decodeResult(encodeResult(tournamentBoard[0])).handle, 'SEEDER');
-  check('merging a duplicate is refused',
+  check('the same run twice is still one row',
     await store.addTournamentScore(decoded.id, tournamentBoard[0]), false);
-  check('a result from elsewhere merges',
+  check('another runner lands beside it',
     await store.addTournamentScore(decoded.id, { ...tournamentBoard[0], id: 'other', handle: 'TRINITY' }), true);
-  check('board now has both', (await store.listTournamentScores(decoded.id)).length, 2);
+  check('the board has both', (await store.listTournamentScores(decoded.id)).length, 2);
 
   section('First-run tutorial');
   await store.saveProfile({ ...(await store.getProfile()), tutorialDone: false });

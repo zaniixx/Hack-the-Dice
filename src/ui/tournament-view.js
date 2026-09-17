@@ -196,22 +196,24 @@ export function tournamentListHTML(tournaments) {
 }
 
 /**
- * One tournament: its rules, its board, and the three ways its code travels —
- * spoken as five characters, scanned as a QR, or pasted as an invite code.
+ * One tournament: set your name, play it, watch the board, share the code.
+ *
+ * In that order, because that is the order it is used in. Everything to do with
+ * inviting people sits below the board rather than above it, and removing the
+ * tournament sits below that, on its own, where it cannot be hit by accident.
+ *
+ * The handle field is here and not only on the home screen: arriving by a
+ * scanned QR lands you straight on this page, and being sent back to sign in
+ * somewhere else before you can play is a silly way to lose someone.
  */
-export function tournamentDetailHTML(tournament, rows, { lastResult = null, notice = '', highlight = null } = {}) {
+export function tournamentDetailHTML(tournament, rows, {
+  handle = '', maxHandle = 12, notice = '', highlight = null,
+} = {}) {
   // The tier is already a pill above, so the list starts after it.
   const rules = tournamentRules(tournament).slice(1)
     .map(line => `<li>${escape(line)}</li>`).join('');
 
   const qr = qrSVG(joinTarget(tournament.code), { moduleSize: 4 });
-  const resultBox = lastResult
-    ? `<label class="field">
-        <span>YOUR LAST RESULT CODE — send it to the host</span>
-        <textarea id="resultCode" rows="2" readonly spellcheck="false">${lastResult}</textarea>
-      </label>
-      <div class="row-actions"><button class="btn sm" data-action="copy-result">COPY RESULT</button></div>`
-    : '';
 
   return `<div class="panel-head">
       <h2>${escape(tournament.name)}</h2>
@@ -220,40 +222,42 @@ export function tournamentDetailHTML(tournament, rows, { lastResult = null, noti
     <div class="op-meta">hosted by ${escape(tournament.host)} · ${tierPill(tournament.difficulty)}</div>
     <ul class="rules">${rules}</ul>
 
-    <div class="invite">
-      <div class="invite-code">
-        <span class="invite-label">OP CODE</span>
-        <span class="op-code">${escape(tournament.id)}</span>
-        <span class="invite-note">Five characters. Type it into JOIN on any machine
-          that already has this tournament.</span>
+    <section class="start-card">
+      <label class="field">
+        <span>YOUR HANDLE — this name goes on the board</span>
+        <input id="handleInput" maxlength="${maxHandle}" value="${escape(handle)}"
+               placeholder="HANDLE" autocomplete="off" spellcheck="false">
+      </label>
+      ${notice ? `<p class="notice">${escape(notice)}</p>` : ''}
+      <div class="row-actions">
+        <button class="btn lime big" data-action="play-tournament:${tournament.id}">PLAY THIS TOURNAMENT</button>
       </div>
-      <div class="invite-qr">
-        ${qr || '<p class="empty-note">This code is too long to show as a QR.</p>'}
-        <span class="invite-note">Scan to join from a phone on the same network.</span>
-      </div>
-    </div>
-
-    <div class="row-actions">
-      <button class="btn lime" data-action="play-tournament:${tournament.id}">PLAY THIS TOURNAMENT</button>
-      <button class="btn sm" data-action="copy-code:${tournament.id}">COPY INVITE CODE</button>
-      <button class="btn sm mag" data-action="delete-tournament:${tournament.id}">REMOVE</button>
-    </div>
-
-    <label class="field">
-      <span>INVITE CODE — carries the whole rule set to another device</span>
-      <textarea id="tournamentCode" rows="2" readonly spellcheck="false">${tournament.code}</textarea>
-    </label>
+    </section>
 
     <h3 class="sec">LOBBY <span class="dim">runs in progress rank live, and settle when they finish</span></h3>
     <div id="tournamentBoard">${raceBoardHTML(rows, { highlight })}</div>
 
-    <h3 class="sec">MERGE A RESULT <span class="dim">paste a runner's result code</span></h3>
-    <label class="field">
-      <textarea id="mergeCode" rows="2" placeholder="HTDR1-..." spellcheck="false"></textarea>
-    </label>
-    ${notice ? `<p class="notice">${escape(notice)}</p>` : ''}
-    <div class="row-actions">
-      <button class="btn cyan" data-action="merge-result:${tournament.id}">MERGE</button>
+    <h3 class="sec">INVITE <span class="dim">any camera app opens the game and joins in one scan</span></h3>
+    <div class="invite">
+      <div class="invite-code">
+        <span class="invite-label">OP CODE</span>
+        <span class="op-code">${escape(tournament.id)}</span>
+        <span class="invite-note">Five characters, for anyone typing it in.</span>
+      </div>
+      <div class="invite-qr">
+        ${qr || '<p class="empty-note">This code is too long to show as a QR.</p>'}
+        <span class="invite-note">Scan to join.</span>
+      </div>
     </div>
-    ${resultBox}`;
+    <div class="row-actions">
+      <button class="btn sm" data-action="copy-code:${tournament.id}">COPY INVITE LINK</button>
+    </div>
+    <details class="raw-code">
+      <summary>Invite code as text</summary>
+      <textarea id="tournamentCode" rows="2" readonly spellcheck="false">${tournament.code}</textarea>
+    </details>
+
+    <div class="row-actions danger-row">
+      <button class="btn sm mag" data-action="delete-tournament:${tournament.id}">REMOVE FROM THIS DEVICE</button>
+    </div>`;
 }

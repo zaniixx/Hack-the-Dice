@@ -246,7 +246,7 @@ async function bankRun(reason) {
   stopLiveRun(); // it stops being a runner in progress and becomes a result
   log(`> run banked: ${fmt(runScore(run))} points for ${run.handle}`, 'amber');
   const result = await submitRun(run, { reason });
-  rememberResult(result.entry); // so the player can hand its code to a host
+  rememberResult(result.entry); // so the boards can pick this run out as yours
   return result;
 }
 

@@ -52,7 +52,7 @@ import * as board from '../src/engine/dice-board.js';
 import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, difficultySummary } from '../src/data/difficulty.js';
 import { runScore } from '../src/game/score.js';
 import {
-  createTournament, decodeTournament, encodeResult, decodeResult, isOpCode,
+  createTournament, decodeTournament, isOpCode,
 } from '../src/game/tournament.js';
 import {
   seedRun, restoreRng, rngState, gameInt, normaliseSeed, randomSeed,
@@ -389,9 +389,6 @@ try {
     decodeTournament('http://10.0.0.5:8000/#join=' + tournament.code).id, tournament.id);
   check('an op code is told apart from an invite code',
     [isOpCode(tournament.id), isOpCode(tournament.code)], [true, false]);
-  check('a result code round trips',
-    decodeResult(encodeResult({ id: 'x1', handle: 'NEO', score: 4200 })).score, 4200);
-  check('a tournament code is not a result code', decodeResult(tournament.code), null);
 
   // There is one board and it is the shared one. A browser-local fallback would
   // show private numbers and call them the leaderboard, so there is not one.

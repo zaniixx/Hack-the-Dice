@@ -59,8 +59,6 @@ const TEXT_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -';
 const MAX_NAME = 20;
 const MAX_HOST = 12;
 
-const RESULT_PREFIX = 'HTDR1-';
-
 /** Catalog orders the ban bits follow. */
 const banOrders = () => ({
   bosses: BOSS_ORDER,
@@ -149,29 +147,6 @@ export function decodeTournament(code) {
     };
   } catch {
     return null; // a mistyped or truncated code is not an error, just a no
-  }
-}
-
-const encodeJSON = text =>
-  btoa(String.fromCharCode(...new TextEncoder().encode(text)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-const decodeJSON = code =>
-  new TextDecoder().decode(
-    Uint8Array.from(atob(code.replace(/-/g, '+').replace(/_/g, '/')), ch => ch.charCodeAt(0)));
-
-/** One result as a code, for carrying a run back to the host's board. */
-export const encodeResult = entry => RESULT_PREFIX + encodeJSON(JSON.stringify(entry));
-
-/** A result code back into a leaderboard entry, or null. */
-export function decodeResult(code) {
-  const trimmed = String(code || '').trim();
-  if (!trimmed.startsWith(RESULT_PREFIX)) return null;
-  try {
-    const entry = JSON.parse(decodeJSON(trimmed.slice(RESULT_PREFIX.length)));
-    return entry && entry.id && typeof entry.score === 'number' ? entry : null;
-  } catch {
-    return null;
   }
 }
 

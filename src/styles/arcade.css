@@ -244,6 +244,31 @@
 .error { font-size: 18px; color: var(--red); margin: 0; }
 .notice { font-size: 18px; color: var(--lime); margin: 0; }
 
+/*
+ * The raw invite code, folded away.
+ *
+ * The QR and the copy button are how it is actually shared; the text is the
+ * fallback for a browser with no clipboard access, which is every phone on a
+ * plain-http LAN. Worth keeping, not worth a block of the screen.
+ */
+.raw-code summary {
+  font-family: var(--px);
+  font-size: 7px;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.raw-code summary:hover { color: var(--cyan); }
+.raw-code textarea { width: 100%; }
+
+/* Removing a tournament sits alone, below everything it could be mistaken for. */
+.danger-row {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--screen-line);
+}
+
 /* ---- Archive: what this device has met, and what it has not --------------- */
 
 .arc-section + .arc-section { margin-top: 16px; }
