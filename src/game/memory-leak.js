@@ -77,7 +77,8 @@ export function tickMemoryLeak(dt) {
 
   run.stats.dmg += dealt;
   leak.pending += dealt;
-  updateFirewall();
+  // Draining: the bar follows the damage rather than animating towards it.
+  updateFirewall({ draining: true });
 
   if (now - leak.lastPopup > POPUP_INTERVAL_MS) {
     floatText('-' + fmt(leak.pending), centerOf(els.firewallBar), 'c-lime small', 700);

@@ -231,6 +231,84 @@
 .error { font-size: 18px; color: var(--red); margin: 0; }
 .notice { font-size: 18px; color: var(--lime); margin: 0; }
 
+/* ---- Archive: what this device has met, and what it has not --------------- */
+
+.arc-section + .arc-section { margin-top: 16px; }
+
+.arc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.arc-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px;
+  min-width: 0;
+  background: var(--screen-2);
+  border: 1px solid var(--screen-line);
+}
+
+.arc-card img {
+  width: 26px;
+  height: 26px;
+  image-rendering: pixelated;
+  flex: none;
+}
+
+.arc-text { min-width: 0; }
+
+.arc-text b {
+  display: block;
+  font-family: var(--px);
+  font-size: 7px;
+  font-weight: normal;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.arc-text small {
+  display: block;
+  font-size: 15px;
+  line-height: 1.05;
+  color: var(--dim);
+  margin-top: 3px;
+}
+
+.arc-text i {
+  display: block;
+  font-style: normal;
+  font-size: 13px;
+  color: var(--screen-line);
+  margin-top: 3px;
+}
+
+/* A gap in the archive: no name, no hint, just the shape of something missing. */
+.arc-card.locked {
+  border-style: dashed;
+  background: transparent;
+}
+
+.arc-card.locked .arc-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-family: var(--px);
+  font-size: 13px;
+  color: var(--dim);
+  border: 1px dashed var(--screen-line);
+}
+
+/* Legible, but plainly not one of the ones you have: the label reads, the
+   description under it recedes. */
+.arc-card.locked .arc-text b { color: var(--dim); }
+.arc-card.locked .arc-text small { color: var(--screen-line); }
+
 /* ---- The author's links -------------------------------------------------- */
 
 .socials {

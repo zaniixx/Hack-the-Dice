@@ -17,6 +17,7 @@ import { els } from './dom.js';
 import { isModalOpen, hideModal } from './modal.js';
 import { isStartScreenOpen } from './start-screen.js';
 import { toggleSheet, closeSheet, openSheet, openSheetOf } from './sheets.js';
+import { openMarket, closeMarket, isMarketOpen } from './market.js';
 import { isCutsceneOpen } from './cutscene.js';
 import { isTouchLayout, toggleFullscreen, canFullscreen } from './viewport.js';
 import { syncSettingsButtons } from './hud.js';
@@ -54,11 +55,26 @@ function bindButtons(actions) {
   els.menuButton.onclick = actions.openMenu;
   els.shopRefreshButton.onclick = actions.refreshShop;
 
-  els.nextNodeButton.onclick = () => {
+  // Both breach buttons do the same thing: the one below the toolkit, and the
+  // one in the market popup that is covering it.
+  const breach = () => {
     if (run.phase !== Phase.SHOP) return;
+    closeMarket();
     sfx.zap();
     actions.nextNode();
   };
+  els.nextNodeButton.onclick = breach;
+  els.marketBreachButton.onclick = breach;
+
+  els.marketButton.onclick = () => {
+    initAudio();
+    openMarket();
+  };
+  els.marketCloseButton.onclick = closeMarket;
+  // Clicking the backdrop, but not the panel itself, closes it.
+  els.market.addEventListener('pointerdown', event => {
+    if (event.target === els.market) closeMarket();
+  });
 
   els.seed.onclick = async () => {
     if (!run || !run.seed) return;
@@ -105,9 +121,14 @@ function bindButtons(actions) {
   });
 }
 
-/** One delegated listener for every buy and sell button in the toolkit. */
+/**
+ * One delegated listener for every buy and sell button.
+ *
+ * Buying happens in the market popup and selling in the toolkit, but they are
+ * the same kind of click, so both roots share a handler.
+ */
 function bindToolkit(actions) {
-  els.toolkit.addEventListener('click', event => {
+  const onClick = event => {
     const button = event.target.closest('button');
     if (!button) return;
     initAudio();
@@ -117,7 +138,10 @@ function bindToolkit(actions) {
     else if (sellDie !== undefined) actions.sell(ItemKind.DIE, +sellDie);
     else if (sellArt !== undefined) actions.sell(ItemKind.ARTIFACT, +sellArt);
     else if (sellAbil !== undefined) actions.sell(ItemKind.ABILITY, +sellAbil);
-  });
+  };
+
+  els.toolkit.addEventListener('click', onClick);
+  els.market.addEventListener('click', onClick);
 }
 
 function bindKeyboard(actions) {
@@ -125,9 +149,13 @@ function bindKeyboard(actions) {
     // The start screen has its own keys, and text fields to type into; a
     // cutscene swallows everything until it is dismissed.
     if (isStartScreenOpen() || isCutsceneOpen()) return;
-    // Escape backs out of an open sheet before anything else.
+    // Escape backs out of whatever is layered over the game, nearest first.
     if (event.code === 'Escape' && openSheetOf()) {
       closeSheet();
+      return;
+    }
+    if (event.code === 'Escape' && isMarketOpen()) {
+      closeMarket();
       return;
     }
     if (isModalOpen()) {
@@ -137,6 +165,8 @@ function bindKeyboard(actions) {
       return;
     }
     if (!run || event.repeat) return;
+    // Mid-sequence: those keys are being typed at something else.
+    if (isTypingShellSequence()) return;
 
     switch (true) {
       case event.code === 'Space':
@@ -154,10 +184,68 @@ function bindKeyboard(actions) {
         event.preventDefault();
         els.nextNodeButton.click();
         break;
+      case event.code === 'KeyM' && run.phase === Phase.SHOP:
+        if (isMarketOpen()) closeMarket();
+        else openMarket();
+        break;
       case /^Digit[1-3]$/.test(event.code):
         actions.useAbility(run.abilities[+event.code.slice(5) - 1]);
         break;
     }
+  });
+}
+
+/**
+ * The sequence that attaches the development console, and the rolling buffer of
+ * the last few keys it is matched against.
+ *
+ * The console is not part of the game and is not loaded with it: the module is
+ * fetched the first time this matches, so a session that never types it never
+ * pays for it. Typing into a field is ignored, which keeps a seed or a handle
+ * from tripping it by accident.
+ *
+ * Keys are also given a gap limit, so a digit pressed now and another pressed a
+ * minute later are not treated as part of the same thing.
+ */
+const SHELL_SEQUENCE = '1241320++';
+const SHELL_KEY_GAP_MS = 1500;
+
+let shellBuffer = '';
+let shellLastKey = 0;
+
+/**
+ * True once the keys so far could only be the opening sequence.
+ *
+ * The game's own keys stand down while that is true, so typing it does not fire
+ * abilities on the way through. It starts at two characters rather than one,
+ * because a single `1` has to stay the ability hotkey it has always been.
+ */
+const isTypingShellSequence = () =>
+  shellBuffer.length > 1 && SHELL_SEQUENCE.startsWith(shellBuffer);
+
+/** Registered before the game's own keys, so it sees each one first. */
+function watchForShell() {
+  addEventListener('keydown', async event => {
+    if (event.key.length !== 1) return;
+    if (event.target.closest?.('input, textarea')) {
+      shellBuffer = '';
+      return;
+    }
+
+    const now = performance.now();
+    if (now - shellLastKey > SHELL_KEY_GAP_MS) shellBuffer = '';
+    shellLastKey = now;
+
+    shellBuffer = (shellBuffer + event.key).slice(-SHELL_SEQUENCE.length);
+    // Keep only what can still become the sequence, so a stray key resets it.
+    while (shellBuffer && !SHELL_SEQUENCE.startsWith(shellBuffer)) {
+      shellBuffer = shellBuffer.slice(1);
+    }
+    if (shellBuffer !== SHELL_SEQUENCE) return;
+
+    shellBuffer = '';
+    const shell = await import('./root-shell.js');
+    shell.toggleRootShell();
   });
 }
 
@@ -177,6 +265,7 @@ function bindDocument() {
  *                         buy, sell, refreshShop, nextNode, openMenu
  */
 export function bindInput(actions) {
+  watchForShell(); // first, so it sees a key before the game acts on it
   bindBoard(actions);
   bindButtons(actions);
   bindToolkit(actions);

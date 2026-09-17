@@ -16,7 +16,7 @@ import { activeLinks } from '../data/links.js';
 import { iconURL } from '../render/icon-sprites.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
-import { store } from '../services/store.js';
+import { store, storeScope } from '../services/store.js';
 import {
   createTournament, decodeTournament, decodeResult, encodeResult, setActiveTournament, isOpCode,
 } from '../game/tournament.js';
@@ -26,6 +26,7 @@ import { toast } from './fx.js';
 import { HOW_TO_PLAY } from './screens.js';
 import { difficultyCardsHTML } from './difficulty-view.js';
 import { boardHTML, difficultyTabsHTML } from './leaderboard-view.js';
+import { archiveHTML } from './archive-view.js';
 import { mergeBoard, raceBoardHTML, captureRowPositions, animateRankChanges } from './live-board.js';
 import {
   hostDraft, resetHostDraft, setHostDifficulty, toggleBan, captureHostForm,
@@ -144,14 +145,28 @@ function homeHTML() {
       ${resume}
       <button class="btn" data-action="view:leaderboard">LEADERBOARD</button>
       <button class="btn" data-action="view:tournaments">TOURNAMENTS</button>
+      <button class="btn" data-action="view:archive">ARCHIVE</button>
       <button class="btn sm" data-action="view:how">HOW TO HACK</button>
     </div>
 
     ${socialsHTML()}
 
-    <p class="start-foot">Everything runs in your browser. Scores and tournaments are kept on
-      this device — tournament codes carry the rules to other machines.</p>
+    <p class="start-foot">${footNote()}</p>
   </div>`;
+}
+
+/**
+ * What the boards are, in one line.
+ *
+ * Which one is true depends on whether a shared board is configured — see
+ * services/config.js — so it is read from the store rather than written twice.
+ */
+function footNote() {
+  return storeScope === 'global'
+    ? `Everything runs in your browser, but the boards do not: scores and
+       tournaments are shared, so every device sees the same standings.`
+    : `Everything runs in your browser. Scores and tournaments are kept on
+       this device — tournament codes carry the rules to other machines.`;
 }
 
 async function leaderboardHTML() {
@@ -256,6 +271,7 @@ const VIEWS = {
   tournament: tournamentDetailView,
   host: async () => `<div class="start-inner">${hostFormHTML()}</div>`,
   join: async () => `<div class="start-inner">${joinFormHTML(joinError)}</div>`,
+  archive: async () => archiveHTML(),
   how: async () => howHTML(),
 };
 

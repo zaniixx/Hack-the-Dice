@@ -18,6 +18,19 @@ import { bits, mult, xMult } from './effects.js';
 import { countPairs, longestStraight } from './combos.js';
 import { fmt, fmtM } from '../core/format.js';
 
+/**
+ * The compounding artifacts.
+ *
+ * These three are the run's engine: they are what a build rides from server 2
+ * to wherever it dies, and the firewall curve in data/enemies.js is shaped
+ * around them. They start small and compound rather than paying out big and
+ * flattening, because a rig that grows by a fixed amount per server gets left
+ * behind by firewalls that do not.
+ */
+const BLOCKCHAIN_GROWTH = 1.15;   // per node breached after purchase
+const SINGULARITY_GROWTH = 1.6;   // per server tier past the first
+const MOORE_GROWTH = 2;           // per migration after purchase
+
 export const ARTIFACTS = {
   // ---- Tier 1 -------------------------------------------------------------
   overclock: {
@@ -102,13 +115,13 @@ export const ARTIFACTS = {
   },
   blockchain: {
     name: 'BLOCKCHAIN', tier: 2, cost: 12, color: '#7dffb0',
-    desc: 'Gains +0.25× Mult for every node breached after purchase.',
+    desc: '×1.15 Mult, compounding for every node breached after purchase.',
     stacksOn: 'breach',
     multiplier: ctx => {
       const nodes = ctx.run.stacks.blockchain || 0;
-      return nodes ? [xMult(1 + 0.25 * nodes)] : [];
+      return nodes ? [xMult(Math.pow(BLOCKCHAIN_GROWTH, nodes))] : [];
     },
-    stack: run => '×' + fmtM(1 + 0.25 * (run.stacks.blockchain || 0)),
+    stack: run => '×' + fmtM(Math.pow(BLOCKCHAIN_GROWTH, run.stacks.blockchain || 0)),
   },
 
   // ---- Tier 3 -------------------------------------------------------------
@@ -127,15 +140,17 @@ export const ARTIFACTS = {
   },
   singularity: {
     name: 'SINGULARITY', tier: 3, cost: 20, color: '#ff3df0',
-    desc: '×Mult equal to the current server tier.',
-    multiplier: ctx => (ctx.run.server > 1 ? [xMult(ctx.run.server)] : []),
+    desc: '×1.6 Mult, compounding for every server tier past the first.',
+    multiplier: ctx => (ctx.run.server > 1
+      ? [xMult(Math.pow(SINGULARITY_GROWTH, ctx.run.server - 1))]
+      : []),
   },
   moore: {
     name: "MOORE'S LAW", tier: 3, cost: 22, color: '#3df2ff',
     desc: '×2 Mult. Doubles with every server migration after purchase.',
     stacksOn: 'migration',
-    multiplier: ctx => [xMult(2 * Math.pow(2, ctx.run.stacks.moore || 0))],
-    stack: run => '×' + fmt(2 * Math.pow(2, run.stacks.moore || 0)),
+    multiplier: ctx => [xMult(2 * Math.pow(MOORE_GROWTH, ctx.run.stacks.moore || 0))],
+    stack: run => '×' + fmt(2 * Math.pow(MOORE_GROWTH, run.stacks.moore || 0)),
   },
 };
 

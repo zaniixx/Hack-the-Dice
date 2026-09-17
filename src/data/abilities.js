@@ -27,6 +27,23 @@ function setValue(die, value, popDie) {
   popDie(die);
 }
 
+/**
+ * Arm a ×Mult on the coming Execute.
+ *
+ * OVERDRIVE and SUDO are the same move at two prices, so they are the same
+ * code: the run carries the multiplier and the name of whatever armed it, and
+ * a bigger one always wins over a smaller one already in place.
+ */
+function arm({ run, log, notify }, multiplier, name) {
+  if (run.overdrive >= multiplier) {
+    notify(`${run.overdriveLabel} ALREADY ARMED`);
+    return false;
+  }
+  run.overdrive = multiplier;
+  run.overdriveLabel = name;
+  log(`> ${name.toLowerCase()} armed: ×${multiplier} on execute`, 'mag');
+}
+
 export const ABILITIES = {
   bitshift: {
     name: 'BIT SHIFT', tier: 1, cost: 6, charges: 1, color: '#3df2ff',
@@ -88,14 +105,7 @@ export const ABILITIES = {
   overdrive: {
     name: 'OVERDRIVE', tier: 2, cost: 11, charges: 1, color: '#ff3df0',
     desc: 'This Execute deals ×2 Hacking Power.',
-    use({ run, log, notify }) {
-      if (run.overdrive) {
-        notify('OVERDRIVE ALREADY ARMED');
-        return false;
-      }
-      run.overdrive = true;
-      log('> overdrive armed: ×2 on execute', 'mag');
-    },
+    use: ctx => arm(ctx, 2, 'OVERDRIVE'),
   },
   rootkit: {
     name: 'ROOTKIT', tier: 2, cost: 12, charges: 1, color: '#ff4d6d',
@@ -104,6 +114,71 @@ export const ABILITIES = {
       run.executes++;
       run.maxExecutes = Math.max(run.maxExecutes, run.executes);
       log('> rootkit installed: +1 execute', 'cyan');
+    },
+  },
+
+  // ---- Tier 3 -------------------------------------------------------------
+  defrag: {
+    name: 'DEFRAG', tier: 3, cost: 18, charges: 1, color: '#3df2ff',
+    desc: '+3 to every unlocked die (up to its max face).',
+    use({ dice, log, notify, popDie }) {
+      let shifted = 0;
+      for (const die of dice) {
+        if (die.locked || die.value >= maxFace(die)) continue;
+        setValue(die, Math.min(maxFace(die), die.value + 3), popDie);
+        shifted++;
+      }
+      if (!shifted) {
+        notify('NO DICE TO DEFRAG');
+        return false;
+      }
+      log(`> defrag: +3 on ${shifted} dice`, 'cyan');
+    },
+  },
+  forkbomb: {
+    name: 'FORK BOMB', tier: 3, cost: 22, charges: 1, color: '#b6ff3d',
+    desc: '+2 Executes on this node.',
+    use({ run, log }) {
+      run.executes += 2;
+      run.maxExecutes = Math.max(run.maxExecutes, run.executes);
+      log('> fork bomb: +2 executes', 'cyan');
+    },
+  },
+  polymorph: {
+    name: 'POLYMORPH', tier: 3, cost: 24, charges: 1, color: '#c9d1ff',
+    desc: 'Every die copies the highest value on the board.',
+    use({ dice, log, notify, popDie }) {
+      if (!dice.length) return false;
+
+      const highest = Math.max(...dice.map(die => die.value));
+      // Each die is still bound by its own faces: a d6 cannot show a 12.
+      const changed = dice.filter(die => Math.min(highest, maxFace(die)) > die.value);
+      if (!changed.length) {
+        notify('NOTHING TO POLYMORPH');
+        return false;
+      }
+      for (const die of changed) setValue(die, Math.min(highest, maxFace(die)), popDie);
+      log(`> polymorph: ${changed.length} dice rewritten to ${highest}`, 'mag');
+    },
+  },
+
+  // ---- Tier 4 -------------------------------------------------------------
+  sudo: {
+    name: 'SUDO', tier: 4, cost: 36, charges: 1, color: '#ffe23d',
+    desc: 'This Execute deals ×4 Hacking Power.',
+    use: ctx => arm(ctx, 4, 'SUDO'),
+  },
+  kexploit: {
+    name: 'KERNEL EXPLOIT', tier: 4, cost: 42, charges: 1, color: '#ff7a5a',
+    desc: 'Every die shows its max face.',
+    use({ dice, log, notify, popDie }) {
+      const changed = dice.filter(die => die.value < maxFace(die));
+      if (!changed.length) {
+        notify('ALL DICE ARE MAXED');
+        return false;
+      }
+      for (const die of changed) setValue(die, maxFace(die), popDie);
+      log(`> kernel exploit: ${changed.length} dice forced to max`, 'mag');
     },
   },
 };

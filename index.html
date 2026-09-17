@@ -157,19 +157,21 @@
 
     <section class="panel right" aria-label="Toolkit">
       <div class="ptitle">
-        <span>TOOLKIT</span><span class="tag">Black market + rig</span>
+        <span>TOOLKIT</span><span class="tag">Your rig</span>
         <button class="btn sm sheet-close touch-only" data-close-sheet>CLOSE</button>
       </div>
       <div class="screen toolkit" id="toolkit">
-        <div class="sec-h">BLACK MARKET <button class="btn sm" id="btnShopReroll">REFRESH</button></div>
-        <div class="shop" id="shop"></div>
-        <button class="btn lime wide" id="btnNext" hidden>BREACH NEXT NODE</button>
         <div class="sec-h">DICE POOL <span id="diceCount"></span></div>
         <div class="inv" id="diceInv"></div>
         <div class="sec-h">ABILITIES <span id="abilCount"></span></div>
         <div id="abilInv"></div>
         <div class="sec-h">CYBERARTIFACTS <span id="artCount"></span></div>
         <div id="artInv"></div>
+      </div>
+      <!-- Below the toolkit, not inside it: these act on the run, not the rig. -->
+      <div class="panel-actions">
+        <button class="btn cyan wide" id="btnMarket">OPEN MARKET</button>
+        <button class="btn lime wide" id="btnNext" hidden>BREACH NEXT NODE</button>
       </div>
     </section>
   </main>
@@ -193,6 +195,18 @@
       <span class="coach-step" id="coachStep"></span>
       <button class="btn sm" id="coachSkip">SKIP TUTORIAL</button>
     </div>
+  </div>
+</div>
+<div id="market" class="market" hidden role="dialog" aria-modal="true" aria-label="Black market">
+  <div class="market-box screen">
+    <div class="market-head">
+      <span class="market-title">BLACK MARKET</span>
+      <span class="market-scrap" id="marketScrap"></span>
+      <button class="btn sm" id="btnShopReroll">REFRESH</button>
+      <button class="btn sm" id="btnMarketClose" title="Close the market">CLOSE</button>
+    </div>
+    <div class="shop" id="shop"></div>
+    <button class="btn lime wide" id="btnMarketBreach">BREACH NEXT NODE</button>
   </div>
 </div>
 <div id="sheetBackdrop" class="sheet-backdrop" hidden></div>

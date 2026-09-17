@@ -17,6 +17,7 @@ import { corpFor, corpName, serverColor } from '../data/corps.js';
 import { difficultyOf } from '../data/difficulty.js';
 import { ABILITIES, isKnownAbility } from '../data/abilities.js';
 import { isKnownArtifact, artifactsStackingOn } from '../data/artifacts.js';
+import { isKnownEdition } from '../data/editions.js';
 import { isKnownDie, STARTING_DICE } from '../data/dice.js';
 import { definitionOf } from '../data/catalog.js';
 import { initAudio } from '../audio/synth.js';
@@ -45,6 +46,19 @@ import { submitRun } from './leaderboard.js';
 import { bossOnNodeStart } from './boss-rules.js';
 import { corpSays, corpLine } from './voice.js';
 import { runScore } from './score.js';
+import { discoverRig } from './archive.js';
+
+/**
+ * Editions from a save, dropped along with anything they were stamped on that
+ * the catalogs no longer recognise.
+ */
+function knownEditions(saved, artifacts) {
+  const editions = {};
+  for (const [id, edition] of Object.entries(saved || {})) {
+    if (artifacts.includes(id) && isKnownEdition(edition)) editions[id] = edition;
+  }
+  return editions;
+}
 
 /** Grow every artifact that counts this kind of event. */
 function advanceStacks(event) {
@@ -60,7 +74,7 @@ function advanceStacks(event) {
  * of them, in which case it is an ordinary node with a boss-sized firewall.
  */
 function createEnemy() {
-  const bossKey = run.node === BOSS_NODE ? bossForNode(run.server) : null;
+  const bossKey = run.node === BOSS_NODE ? bossForNode(run.server, run.seed) : null;
   const max = firewallHP(run.server, run.node);
 
   return {
@@ -84,7 +98,8 @@ export function beginNode() {
   for (const id of run.abilities) run.charges[id] = ABILITIES[id].charges;
 
   run.firstExecute = true;
-  run.overdrive = false;
+  run.overdrive = 1;
+  run.overdriveLabel = '';
   run.rolledOnce = false;
   run.shop = [];
   run.phase = Phase.READY;
@@ -295,6 +310,7 @@ export function startNewRun({ handle, difficulty, tournament = null, seed = '' }
   log(`> seed: ${runSeed}`, 'dim');
   if (tournament) log(`> tournament rules in force: ${tournament.name}`, 'amber');
   log('> tip: lock high dice, reroll low ones, then execute.', 'dim');
+  discoverRig(run); // the starting pool is the first thing anyone meets
   beginNode();
   startLiveRun();
   maybeStartTutorial(); // only for someone who has not seen it
@@ -319,18 +335,22 @@ export function resumeRun(saved) {
   });
   clearLog();
 
+  const artifacts = (saved.artifacts || []).filter(isKnownArtifact);
   Object.assign(run, {
     server: saved.server,
     node: saved.node,
     scrap: saved.scrap,
     dice: saved.dice.filter(isKnownDie),
-    artifacts: (saved.artifacts || []).filter(isKnownArtifact),
+    artifacts,
     abilities: (saved.abilities || []).filter(isKnownAbility),
     stacks: saved.stacks || {},
+    editions: knownEditions(saved.editions, artifacts),
     stats: saved.stats || run.stats,
+    cheated: !!saved.cheated,
   });
   if (run.dice.length < MIN_DICE) run.dice = STARTING_DICE.slice(0, MIN_DICE);
 
+  discoverRig(run);
   log(`> session restored: ${corpName(run.server)}`, 'mag');
 
   if (saved.at !== 'shop') {

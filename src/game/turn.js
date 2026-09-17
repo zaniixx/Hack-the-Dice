@@ -22,7 +22,8 @@ export function rollDice() {
   initAudio(); // the player just interacted: it is safe to start audio
 
   run.rerolls = rerollsPerRoll();
-  run.overdrive = false;
+  run.overdrive = 1;
+  run.overdriveLabel = '';
   run.rolledOnce = true;
   unlockAll();
   resetScoreboard();

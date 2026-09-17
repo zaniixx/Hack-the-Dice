@@ -78,15 +78,21 @@ const state = await import('../src/game/state.js');
 const { startNewRun, beginNode, resumeRun } = await import('../src/game/session.js');
 const { rollDice, rerollDice, onDiceSettled, refreshPreview, useAbility } = await import('../src/game/turn.js');
 const { executePayload } = await import('../src/game/execute.js');
-const { buyItem, sellItem, refreshShop } = await import('../src/game/shop.js');
+const { buyItem, sellItem, refreshShop, generateShop } = await import('../src/game/shop.js');
 const { loadSavedRun, saveRun } = await import('../src/game/save.js');
 const { isLeakDraining, tickMemoryLeak } = await import('../src/game/memory-leak.js');
 const board = await import('../src/engine/dice-board.js'); // `dice` is a live binding too
 const { nodeHP } = await import('../src/data/enemies.js');
+const { artifactSlots, priceOf, sellValueOf } = await import('../src/game/difficulty.js');
+const { ARTIFACTS } = await import('../src/data/artifacts.js');
+const market = await import('../src/ui/market.js');
 const { bossOnNodeStart } = await import('../src/game/boss-rules.js');
 const { isCutsceneOpen, closeCutscene } = await import('../src/ui/cutscene.js');
 const { BOSSES } = await import('../src/data/bosses.js');
 const { els } = await import('../src/ui/dom.js');
+const { updateUI } = await import('../src/ui/hud.js');
+const archive = await import('../src/game/archive.js');
+const { archiveHTML } = await import('../src/ui/archive-view.js');
 
 /** Skip the tumble: drop the dice where they are and hand control back. */
 const settle = () => { board.forceSettleAll(); onDiceSettled(); };
@@ -128,6 +134,11 @@ try {
   settle();
   await executePayload();
   check('breached into the market', state.run.phase, 'shop');
+  check('the market opened itself over the board', market.isMarketOpen(), true);
+  check('and it is really on screen', els.market.hidden, false);
+  check('the breach button sits below the toolkit',
+    els.nextNodeButton.closest('.panel-actions') !== null, true);
+  check('and is offered while the market is open', els.nextNodeButton.hidden, false);
   check('node advanced', state.run.node, 2);
   check('breach was counted', state.run.stats.nodes, 1);
   check('scrap harvested', state.run.scrap > scrapBefore, true);
@@ -146,9 +157,78 @@ try {
   const diceBefore = state.run.dice.length;
   sellItem('die', 0);
   check('sold a die', state.run.dice.length, diceBefore - 1);
+
+  // Closing it stays closed: the player is looking at their rig on purpose.
+  market.closeMarket();
+  updateUI();
+  check('a closed market stays closed', market.isMarketOpen(), false);
+  market.openMarket();
+  check('and MARKET opens it again', market.isMarketOpen(), true);
+
+  check('the market button is offered between nodes', els.marketButton.hidden, false);
+
   beginNode();
+  check('starting a node closes the market', market.isMarketOpen(), false);
+  check('and takes the breach button away', els.nextNodeButton.hidden, true);
+  check('and the market button with it', els.marketButton.hidden, true);
   check('second node ready', state.run.phase, 'ready');
   check('second firewall', state.run.enemy.max, nodeHP(1, 2));
+
+  section('Artifact slots and editions');
+  startNewRun({ handle: 'ANON', difficulty: 'pen-tester', seed: 'STAMP-1' });
+  check('a fresh rig holds five artifacts', artifactSlots(), 5);
+
+  // Fill the rig, then try to buy past it.
+  state.run.phase = 'shop';
+  state.run.scrap = 999;
+  state.run.artifacts = ['overclock', 'sniffer', 'parity', 'brute', 'trojan'];
+  state.run.shop = [{ kind: 'art', id: 'cache' }];
+  buyItem(0);
+  check('a full rig refuses a sixth artifact', state.run.artifacts.length, 5);
+
+  // NEGATIVE brings its own slot, so it fits where nothing else would.
+  state.run.shop = [{ kind: 'art', id: 'cache', edition: 'negative' }];
+  buyItem(0);
+  check('negative fits into a full rig', state.run.artifacts.length, 6);
+  check('and widens it', artifactSlots(), 6);
+  check('the stamp was recorded', state.run.editions.cache, 'negative');
+
+  // A stamp is priced on top of the artifact, and refunded on top of it too.
+  check('a stamped artifact costs more',
+    priceOf(ARTIFACTS.hash, 'prismatic') > priceOf(ARTIFACTS.hash), true);
+  check('selling a stamped artifact pays for the stamp',
+    sellValueOf(ARTIFACTS.cache, 'negative') > sellValueOf(ARTIFACTS.cache), true);
+
+  const scrapBeforeSell = state.run.scrap;
+  sellItem('art', 5);
+  check('selling it takes the slot back', artifactSlots(), 5);
+  check('and the stamp with it', state.run.editions.cache, undefined);
+  check('it paid out', state.run.scrap > scrapBeforeSell, true);
+
+  // A stamp pays into the execute alongside the artifact it sits on.
+  state.run.artifacts = ['quantum'];
+  state.run.editions = { quantum: 'overclocked' };
+  state.run.enemy = null;
+  beginNode();
+  state.run.enemy.hp = state.run.enemy.max = 1e9;
+  rollDice();
+  settle();
+  setFaces([4, 4, 4, 4, 4]);
+  await executePayload();
+  // 20 bits, mult (1 + 4 from OVERCLOCKED) x2 from QUANTUM CORE = 200.
+  check('an overclocked artifact pays its rider', state.run.stats.biggest, 200);
+
+  state.run.editions = { quantum: 'prismatic' };
+  state.run.phase = 'ready';
+  rollDice();
+  settle();
+  setFaces([4, 4, 4, 4, 4]);
+  await executePayload();
+  // 20 bits x2 from QUANTUM CORE x1.5 from PRISMATIC = 60, where the same
+  // artifact stamped OVERCLOCKED landed 200: a flat rider is worth more than a
+  // multiplying one until the rest of the rig has some Mult to multiply.
+  check('a prismatic rider multiplies last',
+    Number(els.power.textContent.replace(/,/g, '')), 60);
 
   section('Boss protocols');
   startNewRun();
@@ -271,14 +351,21 @@ try {
   check('trace ends the run', state.run.phase, 'over');
   check('save was cleared', loadSavedRun(), null);
 
-  startNewRun();
+  startNewRun({ handle: 'ANON', difficulty: 'pen-tester', seed: 'MIGRATE' });
   state.run.node = 5;
   beginNode();
   check('node five is a boss', !!state.run.enemy.boss, true);
   check('boss rule is shown', els.bossRule.textContent.length > 0, true);
+
+  // Which protocol guards it comes from the seed, and the protocols have their
+  // own section. Migration is what is under test here, so pin a boss that does
+  // not refuse a killing blow or rebuild itself afterwards — otherwise this
+  // passes or fails on whichever one the seed dealt.
+  state.run.enemy.boss = 'antivirus';
   state.run.enemy.hp = 1;
   rollDice();
   settle();
+  setFaces([6, 6, 6, 6, 6]);
   await executePayload();
   check('migrated up a server', state.run.server, 2);
   check('back to node one', state.run.node, 1);
@@ -288,7 +375,7 @@ try {
   startNewRun();
   state.run.dice = ['virus', 'amp', 'qubit', 'mirror', 'd12'];
   board.setDicePool(state.run.dice);
-  state.run.artifacts = ['overclock', 'brute', 'hash', 'quantum', 'recursive', 'memleak'];
+  state.run.artifacts = ['overclock', 'brute', 'quantum', 'recursive', 'memleak'];
   state.run.abilities = ['bitshift', 'overdrive', 'rootkit'];
   state.run.charges = { bitshift: 1, overdrive: 1, rootkit: 1 };
   state.run.enemy.hp = state.run.enemy.max = 1e9;
@@ -300,7 +387,7 @@ try {
   check('bit shift raised every die', board.dice.every(die => die.value === (die.type === 'd12' ? 12 : 6)), true);
   check('bit shift spent its charge', state.run.charges.bitshift, 0);
   useAbility('overdrive');
-  check('overdrive is armed', state.run.overdrive, true);
+  check('overdrive is armed', state.run.overdrive, 2);
   useAbility('rootkit');
   check('rootkit added an execute', state.run.executes, 5);
 
@@ -308,17 +395,62 @@ try {
   await executePayload();
   check('special dice scored', state.run.stats.dmg > beforeRig, true);
   check('multipliers stacked up', Number(els.mult.textContent) > 1, true);
-  check('overdrive was consumed', state.run.overdrive, false);
+  check('overdrive was consumed', state.run.overdrive, 1);
   check('memory leak is draining', isLeakDraining(), true);
   const hpBeforeLeak = state.run.enemy.hp;
+
+  // The bar has to come down as the leak drains, not sit still and jump at the
+  // end: a stepped transition restarted every frame never advances a step.
+  state.run.phase = 'ready';
+  const widthBeforeLeak = els.firewallFill.style.width;
   for (let i = 0; i < 40; i++) tickMemoryLeak(0.05);
+
   check('memory leak drains the firewall', state.run.enemy.hp < hpBeforeLeak, true);
+  check('a draining bar drops its transition',
+    els.firewallBar.classList.contains('draining'), true);
+  check('and the fill came down with it',
+    els.firewallFill.style.width !== widthBeforeLeak, true);
+
+  // An ordinary hit still animates, so a big one reads as a chunk taken out.
+  updateUI();
+  check('an ordinary update animates again',
+    els.firewallBar.classList.contains('draining'), false);
 
   state.run.phase = 'shop';
   sellItem('art', 0);
-  check('sold an artifact', state.run.artifacts.length, 5);
+  check('sold an artifact', state.run.artifacts.length, 4);
   sellItem('abil', 0);
   check('sold an ability', state.run.abilities.length, 2);
+
+  section('The archive');
+  archive.forgetAll();
+  check('a fresh device has met nothing',
+    archive.ARCHIVE_SECTIONS.map(s => archive.progressOf(s).seen), [0, 0, 0, 0]);
+
+  startNewRun({ handle: 'ANON', difficulty: 'pen-tester', seed: 'ARCHIVE-1' });
+  check('the pool it starts with counts', archive.isDiscovered('die', 'd6'), true);
+  check('and nothing it has not seen does', archive.isDiscovered('die', 'd20'), false);
+
+  // Being offered something is meeting it, whether or not it is bought.
+  state.run.phase = 'shop';
+  state.run.scrap = 0;
+  generateShop();
+  check('every offer is archived',
+    state.run.shop.every(item => archive.isDiscovered(item.kind, item.id)), true);
+
+  const archived = archiveHTML();
+  check('found entries are named', archived.includes('D6 STANDARD'), true);
+  check('and the rest are a blank', archived.includes('UNKNOWN'), true);
+  check('which does not name them', archived.includes('MOORE'), false);
+
+  archive.revealAll();
+  check('revealing fills every section',
+    archive.ARCHIVE_SECTIONS.every(s => {
+      const progress = archive.progressOf(s);
+      return progress.seen === progress.total;
+    }), true);
+  check('and leaves no blanks on the screen', archiveHTML().includes('UNKNOWN'), false);
+  archive.forgetAll();
 
   section('Saving and resuming');
   state.run.phase = 'ready';
@@ -333,6 +465,14 @@ try {
   check('resumed into a node', state.run.phase, 'ready');
   check('resumed enemy exists', !!state.run.enemy, true);
 
+  state.run.artifacts = ['quantum', 'cache'];
+  state.run.editions = { quantum: 'prismatic', cache: 'negative' };
+  saveRun();
+  resumeRun(loadSavedRun());
+  check('editions survive a save', state.run.editions,
+    { quantum: 'prismatic', cache: 'negative' });
+  check('and the slot they brought with them', artifactSlots(), 6);
+
   state.run.phase = 'shop';
   saveRun();
   resumeRun(loadSavedRun());
@@ -342,11 +482,13 @@ try {
   resumeRun({
     v: 1, server: 1, node: 1, scrap: 5,
     dice: ['d6', 'nonsense'], artifacts: ['ghost', 'bogus'], abilities: ['nope'],
-    stacks: {}, stats: { dmg: 0, nodes: 0, biggest: 0 }, at: 'node', shop: [],
+    stacks: {}, editions: { bogus: 'prismatic', ghost: 'holographic' },
+    stats: { dmg: 0, nodes: 0, biggest: 0 }, at: 'node', shop: [],
   });
   check('unknown dice dropped', state.run.dice, ['d6', 'd6', 'd6']);
   check('unknown artifacts dropped', state.run.artifacts, ['ghost']);
   check('unknown abilities dropped', state.run.abilities, []);
+  check('editions for dropped artifacts go too', state.run.editions, {});
   check('ghost protocol grants an execute', state.run.executes, 5);
 
   say(failures ? `${failures} FAILURE(S)` : 'ALL CHECKS PASSED',

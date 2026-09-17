@@ -5,7 +5,7 @@
  * number the player is shown before committing can never disagree with the
  * number they get.
  */
-import { DICE } from '../data/dice.js';
+import { DICE, mirrorSource } from '../data/dice.js';
 import { BOSSES } from '../data/bosses.js';
 import { countPairs, longestStraight } from '../data/combos.js';
 
@@ -13,16 +13,26 @@ import { countPairs, longestStraight } from '../data/combos.js';
  * Work out what each die will score with.
  *
  * Mirror dice copy the highest value among the non-mirror dice, so they are
- * resolved against the rest of the board rather than their own face.
+ * resolved against the rest of the board rather than their own face — they do
+ * not have one. `mirrorOf` records what each is copying right now, which is
+ * what the board draws on it, and is null while there is nothing to copy.
  */
 export function applyScoringValues(dice) {
-  const ordinaryValues = dice.filter(die => !DICE[die.type].mirrors).map(die => die.value);
-  const highest = ordinaryValues.length ? Math.max(...ordinaryValues) : null;
+  const source = mirrorSource(dice);
+  const highest = source ? source.value : null;
 
   for (const die of dice) {
-    die.scoringValue = DICE[die.type].mirrors && highest !== null ? highest : die.value;
+    if (!DICE[die.type].mirrors) {
+      die.scoringValue = die.value;
+      continue;
+    }
+    // With no ordinary die on the board there is nothing to copy, and it falls
+    // back to the face it rolled — so that is what it shows.
+    die.mirrorOf = highest === null ? die.value : highest;
+    die.scoringValue = die.mirrorOf;
   }
 }
+
 
 const bossOf = enemy => (enemy && enemy.boss ? BOSSES[enemy.boss] : null);
 

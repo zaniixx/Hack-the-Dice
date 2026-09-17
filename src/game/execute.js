@@ -7,10 +7,11 @@
  *
  *   1. each die scores Bits, plus whatever its type adds
  *   2. artifacts with a perDie hook fire alongside each die
+ *   2b. a die that scores twice (CHRONO) goes round again
  *   3. RECURSIVE LOOP retriggers the best die
- *   4. artifacts add flat bonuses
+ *   4. artifacts add flat bonuses, then so do their editions
  *   5. dice that carry a late ×Mult (AMP, QUBIT) resolve
- *   6. artifacts apply ×Mult
+ *   6. artifacts apply ×Mult, then so do their editions
  *   7. OVERDRIVE, then the boss's cipher shield
  *   8. Bits × Mult lands on the firewall
  *
@@ -20,6 +21,7 @@ import { fmt, fmtM } from '../core/format.js';
 import { sleep, rawSleep } from '../core/time.js';
 import { DICE } from '../data/dice.js';
 import { ARTIFACTS } from '../data/artifacts.js';
+import { EDITIONS } from '../data/editions.js';
 import { EffectType, bits, xMult } from '../data/effects.js';
 import { MEMORY_LEAK_RATE } from '../data/rules.js';
 import { sfx } from '../audio/sfx.js';
@@ -117,6 +119,25 @@ async function runArtifactPhase(tally, hook, pause) {
   }
 }
 
+/**
+ * The same, for editions.
+ *
+ * A stamp pays out of the slot it is stamped on, in the same phase order as the
+ * artifacts themselves, so a PRISMATIC rider lands after every flat bonus is in
+ * and multiplies the lot.
+ */
+async function runEditionPhase(tally, hook, pause) {
+  for (const id of run.artifacts) {
+    const edition = EDITIONS[run.editions[id]];
+    if (!edition || !edition[hook]) continue;
+    for (const effect of edition[hook](tally)) {
+      executeView.pulseArtifact(id);
+      applyEffect(tally, effect, Source.artifact(id));
+      await sleep(pause);
+    }
+  }
+}
+
 /** Whatever the boss protocol does to the finished payload. */
 async function applyBossRule(tally) {
   const effects = bossMultipliers(tally);
@@ -158,6 +179,15 @@ async function scoreBoard(tally, enemy) {
     }
     tally.scored.push(die);
     await scoreDie(die, tally, index++);
+
+    // A die that scores twice pays out again the way RECURSIVE LOOP does: the
+    // second pass is not added to `scored`, so it cannot invent a pair that is
+    // not on the board.
+    if (DICE[die.type].retriggers) {
+      executeView.announceDie(die, 'AGAIN');
+      await sleep(180);
+      await scoreDie(die, tally, index++);
+    }
   }
 
   if (hasArtifact('recursive') && tally.scored.length) {
@@ -222,6 +252,7 @@ async function resolveExecute() {
 
   await scoreBoard(tally, enemy);
   await runArtifactPhase(tally, 'bonus', 230);
+  await runEditionPhase(tally, 'flat', 230);
 
   for (const late of tally.lateMultipliers) {
     late.die.flash = 1;
@@ -230,9 +261,11 @@ async function resolveExecute() {
   }
 
   await runArtifactPhase(tally, 'multiplier', 260);
+  await runEditionPhase(tally, 'late', 260);
 
-  if (run.overdrive) {
-    applyEffect(tally, xMult(2, 'OVERDRIVE ×2'), Source.abilities());
+  if (run.overdrive > 1) {
+    const label = `${run.overdriveLabel} ×${fmtM(run.overdrive)}`;
+    applyEffect(tally, xMult(run.overdrive, label), Source.abilities());
     await sleep(260);
   }
   if (enemy.boss) await applyBossRule(tally);
@@ -253,7 +286,8 @@ async function resolveExecute() {
   updateFirewall();
 
   run.firstExecute = false;
-  run.overdrive = false;
+  run.overdrive = 1;
+  run.overdriveLabel = '';
   if (hasArtifact('memleak') && total > 0) startLeak(total * MEMORY_LEAK_RATE);
   run.executes--;
   unlockAll();

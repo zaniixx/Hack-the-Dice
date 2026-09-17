@@ -86,6 +86,7 @@ const { store } = await import('../src/services/store.js');
 const { els } = await import('../src/ui/dom.js');
 const { updateUI } = await import('../src/ui/hud.js');
 const { startTutorial } = await import('../src/ui/tutorial.js');
+const { bossForServer, bossOrderFor } = await import('../src/data/bosses.js');
 
 /** Screen actions are async; give each click a frame to settle. */
 const tick = () => new Promise(resolve => setTimeout(resolve, 60));
@@ -259,7 +260,18 @@ try {
   state.run.server = 1;
   state.run.node = 5;
   session.beginNode();
-  check('banned boss is replaced', state.run.enemy.boss, 'encryption');
+
+  // Which protocol is scheduled comes from the run's seed, so the substitute
+  // does too: the rule is that the ban holds and the run's own order decides
+  // who stands in, not that any particular one does.
+  const order = bossOrderFor(state.run.seed, 0);
+  const scheduled = bossForServer(1, state.run.seed);
+  const standIn = scheduled === 'antivirus'
+    ? order[(order.indexOf('antivirus') + 1) % order.length]
+    : scheduled;
+  check('banned boss never guards a node', state.run.enemy.boss === 'antivirus', false);
+  check('an allowed one stands in', isAllowed('boss', state.run.enemy.boss), true);
+  check('and it is the next in this run’s order', state.run.enemy.boss, standIn);
 
   section('The lobby, live');
   const liveNow = await store.listLiveRuns(decoded.id);

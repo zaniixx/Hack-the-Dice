@@ -15,16 +15,19 @@ import { BOSSES } from '../data/bosses.js';
 import { corpName } from '../data/corps.js';
 import { difficultyOf } from '../data/difficulty.js';
 import {
-  MAX_ARTIFACTS, MAX_ABILITIES, BOSS_NODE, NODES_PER_SERVER, SHOP_REFRESH_BASE_COST,
+  MAX_ABILITIES, BOSS_NODE, NODES_PER_SERVER, SHOP_REFRESH_BASE_COST,
 } from '../data/rules.js';
+import { EDITIONS } from '../data/editions.js';
 import { iconURL } from '../render/icon-sprites.js';
 import { isEnemyDestroyed, hasEnemyDebris } from '../render/enemy-view.js';
 import { run, Phase } from '../game/state.js';
 import { loadBest } from '../game/save.js';
+import { artifactSlots } from '../game/difficulty.js';
 import { renderShop } from './shop-view.js';
 import { renderInventory } from './inventory-view.js';
 import { els } from './dom.js';
 import { syncSheetsToPhase } from './sheets.js';
+import { syncMarketToPhase } from './market.js';
 import { syncSoundtrack } from '../game/soundtrack.js';
 import { syncTutorial } from './tutorial.js';
 
@@ -73,11 +76,20 @@ export function showScorePreview(bitsTotal, tags) {
 }
 
 /**
- * The firewall bar. The ghost layer trails the fill on a delayed transition,
- * which is what makes a big hit read as a chunk taken out.
+ * The firewall bar.
+ *
+ * The ghost layer trails the fill on a delayed transition, which is what makes
+ * a single big hit read as a chunk taken out. A continuous drain is the
+ * opposite kind of change and needs the opposite treatment: MEMORY LEAK moves
+ * the width every frame, and a stepped transition restarted every frame never
+ * reaches its first step — the bar would sit still for the whole ten seconds
+ * and then jump. `draining` hands the fill straight to the damage so the player
+ * watches the firewall come down as it happens.
  */
-export function updateFirewall() {
+export function updateFirewall({ draining = false } = {}) {
   const enemy = run && run.enemy;
+  els.firewallBar.classList.toggle('draining', draining);
+
   if (!enemy || run.phase === Phase.SHOP || run.phase === Phase.TITLE) {
     els.firewallFill.style.width = '0%';
     els.firewallGhost.style.width = '0%';
@@ -91,17 +103,26 @@ export function updateFirewall() {
 }
 
 function renderArtifactRow() {
+  // The row is exactly as wide as the rig: a NEGATIVE edition adds a column.
+  const slots = artifactSlots();
+  els.artifactRow.style.setProperty('--slots', slots);
+
   let html = '';
-  for (let i = 0; i < MAX_ARTIFACTS; i++) {
+  for (let i = 0; i < slots; i++) {
     const id = run.artifacts[i];
     if (!id) {
       html += '<div class="art empty">EMPTY</div>';
       continue;
     }
     const def = ARTIFACTS[id];
+    const edition = EDITIONS[run.editions[id]];
     const stack = def.stack ? `<em>${def.stack(run)}</em>` : '';
-    html += `<div class="art" data-id="${id}" title="${def.name}: ${def.desc}">
-      <img src="${iconURL(id, def.color)}" alt=""><span>${def.name}</span>${stack}
+    const stamp = edition ? `<i class="ed">${edition.tag}</i>` : '';
+    const title = `${def.name}: ${def.desc}`
+      + (edition ? ` — ${edition.name}: ${edition.desc}` : '');
+    html += `<div class="art${edition ? ' stamped' : ''}" data-id="${id}" title="${title}"
+                  style="--ed:${edition ? edition.color : 'transparent'}">
+      <img src="${iconURL(id, def.color)}" alt=""><span>${def.name}</span>${stack}${stamp}
     </div>`;
   }
   els.artifactRow.innerHTML = html;
@@ -199,13 +220,23 @@ function renderControls(phase) {
 }
 
 function renderShopControls(phase) {
-  els.nextNodeButton.hidden = phase !== Phase.SHOP;
-  els.nextNodeButton.textContent =
-    run.node === BOSS_NODE ? 'BREACH THE BOSS' : `BREACH NODE ${run.node}`;
+  const inShop = phase === Phase.SHOP;
+  const breachLabel = run.node === BOSS_NODE ? 'BREACH THE BOSS' : `BREACH NODE ${run.node}`;
+
+  // Two ways to the same action: below the toolkit, and in the market popup
+  // that covers it. Both only exist between nodes.
+  els.nextNodeButton.hidden = !inShop;
+  els.nextNodeButton.textContent = breachLabel;
+  els.marketBreachButton.hidden = !inShop;
+  els.marketBreachButton.textContent = breachLabel;
+
+  // There is no market during a fight, so there is no button offering one.
+  els.marketButton.hidden = !inShop;
+  els.marketScrap.innerHTML = scrapTag(fmt(run.scrap));
 
   const cost = shopRefreshCost();
   els.shopRefreshButton.innerHTML = `REFRESH ${scrapTag(cost)}`;
-  els.shopRefreshButton.disabled = phase !== Phase.SHOP || run.scrap < cost;
+  els.shopRefreshButton.disabled = !inShop || run.scrap < cost;
 }
 
 /** Repaint the whole HUD from the run state. */
@@ -223,6 +254,7 @@ export function updateUI() {
   renderShop();
   renderInventory();
   renderShopControls(phase);
+  syncMarketToPhase(phase);
   syncSheetsToPhase(phase);
   syncSoundtrack(run);
   syncTutorial();

@@ -54,6 +54,8 @@ let timeSinceThrow = 0;
  * lift/flash   short-lived highlight, used when a die scores or is altered
  * scoringValue what it contributes this execute — the same as `value` except
  *              for mirror dice, which copy the highest value on the board
+ * mirrorOf     for a mirror die, the value it is currently copying, or null
+ *              while there is nothing to copy; see game/scoring.js
  */
 function createDie(type) {
   const faces = DICE[type].faces;
@@ -66,6 +68,7 @@ function createDie(type) {
     value,
     shownValue: value,
     scoringValue: value,
+    mirrorOf: null,
     flickerTimer: 0,
     locked: false,
     quarantined: false,
@@ -114,6 +117,8 @@ export function throwDice(list, { fullThrow }) {
     die.settled = false;
     die.flickerTimer = 0;
     die.quarantined = false;
+    // A mirror die lands blank and takes a value from the board afterwards.
+    die.mirrorOf = null;
 
     if (fullThrow) {
       die.vx = rand(-90, 90);
@@ -305,7 +310,9 @@ function stepDie(die, dt) {
   const moving = !grounded || speed > 6 || Math.abs(die.spin) > 1.2;
 
   if (moving) {
-    // While it tumbles, show a face that is not necessarily the real one.
+    // While it tumbles, show a face that is not necessarily the real one — a
+    // mirror die has none to show, so it stays blank the whole way down.
+    if (DICE[die.type].mirrors) return;
     die.flickerTimer -= dt;
     if (die.flickerTimer <= 0) {
       die.flickerTimer = 0.06 + Math.random() * 0.04;

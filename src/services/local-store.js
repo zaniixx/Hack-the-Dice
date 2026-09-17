@@ -106,8 +106,13 @@ export const localStore = {
     return entry;
   },
 
-  /** Take a run out of the lobby: it finished, or it went away. */
-  async clearLiveRun(id) {
+  /**
+   * Take a run out of the lobby: it finished, or it went away.
+   *
+   * The tournament id is unused here — one browser can find the row by id
+   * alone — but the shared board needs it, so both stores take it.
+   */
+  async clearLiveRun(id, _tournamentId = '') {
     const live = readJSON(LIVE_RUNS_KEY, {});
     delete live[id];
     writeJSON(LIVE_RUNS_KEY, live);

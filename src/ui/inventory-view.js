@@ -7,11 +7,12 @@
 import { DICE } from '../data/dice.js';
 import { ABILITIES } from '../data/abilities.js';
 import { ARTIFACTS } from '../data/artifacts.js';
-import { MAX_DICE, MAX_ABILITIES, MAX_ARTIFACTS, MIN_DICE } from '../data/rules.js';
+import { MAX_DICE, MAX_ABILITIES, MIN_DICE } from '../data/rules.js';
+import { EDITIONS } from '../data/editions.js';
 import { iconURL } from '../render/icon-sprites.js';
 import { dieIconURL } from '../render/die-sprites.js';
 import { run, Phase } from '../game/state.js';
-import { sellValueOf } from '../game/difficulty.js';
+import { sellValueOf, artifactSlots } from '../game/difficulty.js';
 import { els } from './dom.js';
 
 function sellButton(attribute, value) {
@@ -52,14 +53,21 @@ export function renderInventory() {
       }).join('')
     : '<div class="empty-note">None yet. Abilities show up in the black market.</div>';
 
-  els.artifactCount.textContent = `${run.artifacts.length}/${MAX_ARTIFACTS}`;
+  els.artifactCount.textContent = `${run.artifacts.length}/${artifactSlots()}`;
   els.artifactInventory.innerHTML = run.artifacts.length
     ? run.artifacts.map((id, i) => {
         const def = ARTIFACTS[id];
-        const name = def.name + (def.stack ? ' ' + def.stack(run) : '');
+        const edition = EDITIONS[run.editions[id]];
+        // The stamp goes in front of the name and its rider after the text, so
+        // the row reads as one item rather than two stacked ones.
+        const stamp = edition
+          ? `<i class="ed" style="--ed:${edition.color}">${edition.name}</i> `
+          : '';
+        const name = stamp + def.name + (def.stack ? ' ' + def.stack(run) : '');
+        const desc = def.desc + (edition ? ` ${edition.desc}` : '');
         return rowHTML(
-          iconURL(id, def.color), name, def.desc,
-          canSell ? `data-sell-art="${i}"` : null, sellValueOf(def),
+          iconURL(id, def.color), name, desc,
+          canSell ? `data-sell-art="${i}"` : null, sellValueOf(def, run.editions[id]),
         );
       }).join('')
     : '<div class="empty-note">No cyberartifacts installed yet.</div>';

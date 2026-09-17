@@ -33,7 +33,9 @@ export function saveRun() {
     artifacts: run.artifacts,
     abilities: run.abilities,
     stacks: run.stacks,
+    editions: run.editions,
     stats: run.stats,
+    cheated: run.cheated,
     // Resume into the market if that is where the player was, else at the node.
     at: run.phase === Phase.SHOP ? 'shop' : 'node',
     shop: run.shop,

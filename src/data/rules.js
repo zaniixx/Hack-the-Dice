@@ -7,8 +7,25 @@
 
 /** Rig capacity. Buying past a cap asks the player to sell something first. */
 export const MAX_DICE = 8;
-export const MAX_ARTIFACTS = 6;
 export const MAX_ABILITIES = 3;
+
+/**
+ * Artifact slots before anything adjusts them.
+ *
+ * Deliberately fewer than there are artifacts worth owning: a rig that fits
+ * every good idea is a rig with no decisions in it. The threat level may lower
+ * this further, and a NEGATIVE edition raises it — see game/difficulty.js,
+ * artifactSlots().
+ */
+export const BASE_ARTIFACT_SLOTS = 5;
+
+/**
+ * Highest tier the catalogs go to, and so the deepest gear a run can buy.
+ *
+ * A tier unlocks on the server of the same number, which is what makes a deep
+ * run feel like better hardware rather than only bigger firewalls.
+ */
+export const MAX_TIER = 4;
 
 /** The pool may never be sold below this, or a roll would be meaningless. */
 export const MIN_DICE = 3;

@@ -78,6 +78,28 @@ export function restoreRng(seed, savedState) {
   state = Number.isInteger(savedState) ? savedState >>> 0 : hashSeed(currentSeed);
 }
 
+/**
+ * An independent generator built from a seed.
+ *
+ * The run's own stream moves every time anything rolls, so it is the wrong
+ * place to ask a question whose answer must not depend on when it was asked.
+ * A run's boss order is exactly that: it has to be the same for two players on
+ * the same seed, and the same for a run resumed halfway through. `salt` keeps
+ * two such questions from getting correlated answers off one seed.
+ *
+ * @returns {function(): number} the next float in [0, 1), each call
+ */
+export function streamFrom(seed, salt = '') {
+  let state = hashSeed(normaliseSeed(seed) + '|' + salt);
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Next float in [0, 1). */
 export function gameFloat() {
   state = (state + 0x6d2b79f5) >>> 0;

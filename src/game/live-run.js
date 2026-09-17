@@ -18,6 +18,7 @@ import { runScore } from './score.js';
 const HEARTBEAT_MS = 15000;
 
 let liveId = null;
+let liveTournament = null;
 let timer = null;
 
 /** A snapshot of the run as the lobby should show it. */
@@ -44,6 +45,9 @@ export function startLiveRun() {
   if (!run || !run.tournament) return;
 
   liveId = `live-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  // Remembered separately: stopping has to know which lobby to leave, and by
+  // then the run may already have been replaced.
+  liveTournament = run.tournament.id;
   publish();
   timer = setInterval(publish, HEARTBEAT_MS);
 }
@@ -58,8 +62,9 @@ export function publish() {
 export function stopLiveRun() {
   if (timer) clearInterval(timer);
   timer = null;
-  if (liveId) store.clearLiveRun(liveId);
+  if (liveId) store.clearLiveRun(liveId, liveTournament);
   liveId = null;
+  liveTournament = null;
 }
 
 /** The id this run is publishing under, so the board can mark it as yours. */

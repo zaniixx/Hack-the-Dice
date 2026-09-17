@@ -74,6 +74,13 @@
   background:repeating-linear-gradient(90deg,var(--red) 0 6px,#c42a4a 6px 8px);
   transition:width .25s steps(6);
 }
+/*
+ * MEMORY LEAK moves the width every frame. A stepped transition restarted that
+ * often never advances a step, so the fill tracks the damage directly; the
+ * ghost keeps a short trail, which is what makes the drain visible as a drain.
+ */
+.fw-bar.draining .fill { transition:none; }
+.fw-bar.draining .ghost { transition:width .3s linear; }
 .bossrule {
   font-size:17px;
   color:var(--red);

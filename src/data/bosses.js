@@ -23,7 +23,7 @@
 import { xMult } from './effects.js';
 import { countPairs } from './combos.js';
 import { WATCHDOG_ABSORB_MAX, CIPHER_DAMAGE_MULTIPLIER } from './rules.js';
-import { gamePick } from '../core/game-random.js';
+import { gamePick, streamFrom } from '../core/game-random.js';
 
 /** THROTTLE lets this many dice through. */
 const THROTTLE_DICE = 3;
@@ -173,14 +173,44 @@ export const BOSSES = {
 };
 
 /**
- * The order bosses appear in, easiest first. Server 1 meets the first, and the
- * cycle repeats once a run gets past the last.
+ * Every protocol, in catalog order.
+ *
+ * This is the order the tournament ban bits are packed in and the order the
+ * screens list them in — it is not the order a run meets them in. See
+ * bossOrderFor().
  */
 export const BOSS_ORDER = [
   'antivirus', 'encryption', 'watchdog', 'throttle',
   'wraith', 'ransomware', 'sandbox', 'revenant',
 ];
 
-export const bossForServer = server => BOSS_ORDER[(server - 1) % BOSS_ORDER.length];
+/**
+ * The order one run meets them in: a shuffle drawn from the run's seed.
+ *
+ * Fixed order made a run predictable after the first playthrough — you knew
+ * server 3 was the WATCHDOG and could buy for it. Shuffling per seed keeps the
+ * surprise while keeping a seed reproducible: two players racing the same seed
+ * still meet the same protocols in the same places.
+ *
+ * Each cycle of eight servers is shuffled separately, so every protocol is met
+ * once before any is met twice, and the second lap is not a repeat of the first.
+ */
+export function bossOrderFor(seed, cycle = 0) {
+  const next = streamFrom(seed, 'bosses:' + cycle);
+  const order = [...BOSS_ORDER];
+  // Fisher-Yates, from the back, so every permutation is equally likely.
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
+
+/** The protocol guarding node 5 of `server`, for a run on `seed`. */
+export function bossForServer(server, seed = '') {
+  const index = Math.max(0, server - 1);
+  const cycle = Math.floor(index / BOSS_ORDER.length);
+  return bossOrderFor(seed, cycle)[index % BOSS_ORDER.length];
+}
 
 export const isKnownBoss = id => Object.hasOwn(BOSSES, id);

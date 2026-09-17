@@ -1,9 +1,10 @@
 /* Center column: artifact row, dice board, scorebar, controls. */
 
 /* center */
+/* --slots is set from the HUD: the row is as wide as the rig currently is. */
 .arts {
   display:grid;
-  grid-template-columns:repeat(6,minmax(0,1fr));
+  grid-template-columns:repeat(var(--slots,5),minmax(0,1fr));
   gap:6px;
   flex:none;
 }
@@ -48,6 +49,20 @@
   font-family:var(--px);
   font-size:6px;
   color:var(--amber);
+}
+/* An edition stamp: a coloured rim on the slot, and its tag in the corner. */
+.art.stamped {
+  border-color:var(--ed);
+  box-shadow:inset 0 0 0 1px var(--ed),0 0 10px -3px var(--ed);
+}
+.art .ed {
+  position:absolute;
+  top:3px;
+  left:3px;
+  font-style:normal;
+  font-family:var(--px);
+  font-size:6px;
+  color:var(--ed);
 }
 .art.empty {
   color:var(--screen-line);

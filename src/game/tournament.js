@@ -11,7 +11,7 @@
  * What does not travel on its own is the board. With the browser-local store,
  * scores are kept per device; see services/local-store.js.
  */
-import { BOSS_ORDER, BOSSES, bossForServer } from '../data/bosses.js';
+import { BOSS_ORDER, BOSSES, bossForServer, bossOrderFor } from '../data/bosses.js';
 import { DICE } from '../data/dice.js';
 import { ARTIFACTS } from '../data/artifacts.js';
 import { ABILITIES } from '../data/abilities.js';
@@ -38,7 +38,7 @@ const BAN_LISTS = {
  *   4   format version
  *   2   threat level, indexed into DIFFICULTY_ORDER
  *   25  the five-character op code
- *   36  one ban bit per boss, die, cyberartifact and ability, in catalog order
+ *   ..  one ban bit per boss, die, cyberartifact and ability, in catalog order
  *   1   seed present, then 6 bits of length and 6 bits per character
  *   ..  name and host, length-prefixed, 6 bits per character
  *
@@ -50,7 +50,7 @@ const BAN_LISTS = {
  * change stop decoding: bump CODE_VERSION when that happens.
  */
 const CODE_PREFIX = 'HTD-';
-const CODE_VERSION = 2;
+const CODE_VERSION = 3;
 const ID_LENGTH = 5;
 
 /** 38 symbols for names and seeds: 6 bits each, all QR-alphanumeric safe. */
@@ -217,19 +217,22 @@ export function isAllowed(kind, id) {
 }
 
 /**
- * The boss guarding node 5 of `server`.
+ * The boss guarding node 5 of `server`, on a run playing `seed`.
  *
- * Bosses normally cycle in a fixed order. If the host banned the scheduled one,
- * the cycle rolls on to the next one that is allowed; if they banned all three,
- * node 5 has no protocol at all — just a very large firewall.
+ * The seed decides which protocol is scheduled where. If the host banned the
+ * scheduled one, the run's own order rolls on to the next one that is allowed
+ * — the run's order, not the catalog's, so a banned protocol does not drag
+ * every run towards the same substitute. If they banned all of them, node 5 has
+ * no protocol at all: just a very large firewall.
  */
-export function bossForNode(server) {
-  const scheduled = bossForServer(server);
+export function bossForNode(server, seed = '') {
+  const scheduled = bossForServer(server, seed);
   if (isAllowed('boss', scheduled)) return scheduled;
 
-  const start = BOSS_ORDER.indexOf(scheduled);
-  for (let step = 1; step < BOSS_ORDER.length; step++) {
-    const candidate = BOSS_ORDER[(start + step) % BOSS_ORDER.length];
+  const order = bossOrderFor(seed, Math.floor(Math.max(0, server - 1) / BOSS_ORDER.length));
+  const start = order.indexOf(scheduled);
+  for (let step = 1; step < order.length; step++) {
+    const candidate = order[(start + step) % order.length];
     if (isAllowed('boss', candidate)) return candidate;
   }
   return null;

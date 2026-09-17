@@ -4,11 +4,16 @@
  * A visit offers artifacts, one die, and one ability. Offers are weighted
  * towards the highest tier the player has unlocked, so climbing servers feels
  * like better gear rather than just bigger numbers.
+ *
+ * Artifacts can also come stamped with an edition, and deep servers stamp more
+ * of them: by then the rig is full and the only way to get more out of a slot
+ * is to put something better in it.
  */
-import { MAX_DICE, MAX_ARTIFACTS, MAX_ABILITIES, MIN_DICE } from '../data/rules.js';
+import { MAX_DICE, MAX_ABILITIES, MIN_DICE, MAX_TIER } from '../data/rules.js';
 import { DICE } from '../data/dice.js';
 import { ARTIFACTS } from '../data/artifacts.js';
 import { ABILITIES } from '../data/abilities.js';
+import { EDITIONS, editionChance, slotsFrom } from '../data/editions.js';
 import { ItemKind, definitionOf, definitionIn, idsOf } from '../data/catalog.js';
 import { gameFloat } from '../core/game-random.js';
 import { sfx } from '../audio/sfx.js';
@@ -17,15 +22,16 @@ import { log } from '../ui/log.js';
 import { toast } from '../ui/fx.js';
 import { updateUI, shopRefreshCost } from '../ui/hud.js';
 import { run, Phase } from './state.js';
-import { priceOf, sellValueOf } from './difficulty.js';
+import { priceOf, sellValueOf, artifactSlots } from './difficulty.js';
 import { isAllowed } from './tournament.js';
+import { discoverOffers, discover } from './archive.js';
 import { saveRun } from './save.js';
 
 /** Highest tier the market stocks at this server. */
-const topTier = () => Math.min(3, run.server);
+const topTier = () => Math.min(MAX_TIER, run.server);
 
 /** Artifacts offered per visit: three from server 2 on. */
-const artifactSlots = () => (run.server >= 2 ? 3 : 2);
+const artifactOffers = () => (run.server >= 2 ? 3 : 2);
 
 /** Weighted pick from `ids`, with top-tier items twice as likely. */
 function pickWeighted(kind, ids) {
@@ -41,6 +47,23 @@ function pickWeighted(kind, ids) {
   return pool[pool.length - 1].id;
 }
 
+/**
+ * The stamp a market artifact comes wearing, or null for a plain one.
+ *
+ * Rolled once per offer, so a refresh is also a reroll of the editions on it.
+ */
+function rollEdition() {
+  if (gameFloat() >= editionChance(run.server)) return null;
+
+  const ids = Object.keys(EDITIONS);
+  let roll = gameFloat() * ids.reduce((total, id) => total + EDITIONS[id].weight, 0);
+  for (const id of ids) {
+    roll -= EDITIONS[id].weight;
+    if (roll < 0) return id;
+  }
+  return ids[ids.length - 1];
+}
+
 /** Available means unlocked at this server, and not banned by the tournament. */
 const available = (kind, catalog, id) => catalog[id].tier <= topTier() && isAllowed(kind, id);
 
@@ -54,11 +77,11 @@ export function generateShop() {
 
   const items = [];
   const offered = [];
-  for (let slot = 0; slot < artifactSlots(); slot++) {
+  for (let slot = 0; slot < artifactOffers(); slot++) {
     const id = pickWeighted(ItemKind.ARTIFACT, artifactIds.filter(a => !offered.includes(a)));
     if (!id) continue; // the player already owns everything available
     offered.push(id);
-    items.push({ kind: ItemKind.ARTIFACT, id });
+    items.push({ kind: ItemKind.ARTIFACT, id, edition: rollEdition() });
   }
 
   const dieId = pickWeighted(ItemKind.DIE, dieIds);
@@ -71,6 +94,8 @@ export function generateShop() {
   else if (fallbackDie) items.push({ kind: ItemKind.DIE, id: fallbackDie });
 
   run.shop = items;
+  // Being offered something counts as meeting it, bought or not.
+  discoverOffers(items);
 }
 
 /** Enter the market after a breach. */
@@ -98,12 +123,17 @@ export function buyItem(index) {
   const item = run.shop[index];
   if (!item || item.sold) return;
   const def = definitionOf(item);
-  const price = priceOf(def);
+  const price = priceOf(def, item.edition);
   if (run.scrap < price) return refuse('NOT ENOUGH DATA SCRAP');
 
   if (item.kind === ItemKind.ARTIFACT) {
-    if (run.artifacts.length >= MAX_ARTIFACTS) return refuse('ARTIFACT SLOTS FULL: SELL ONE FIRST');
+    // NEGATIVE brings its own slot, so it is never the thing that will not fit.
+    if (!slotsFrom(item.edition) && run.artifacts.length >= artifactSlots()) {
+      return refuse('ARTIFACT SLOTS FULL: SELL ONE FIRST');
+    }
     run.artifacts.push(item.id);
+    if (item.edition) run.editions[item.id] = item.edition;
+    discover(item.kind, item.id);
     if (def.stack) run.stacks[item.id] = 0; // starts counting from purchase
   } else if (item.kind === ItemKind.DIE) {
     if (run.dice.length >= MAX_DICE) return refuse('DICE POOL FULL: SELL ONE FIRST');
@@ -117,7 +147,8 @@ export function buyItem(index) {
   run.scrap -= price;
   item.sold = true;
   sfx.coin();
-  log(`> installed ${def.name}`, 'cyan');
+  const stamp = EDITIONS[item.edition];
+  log(`> installed ${stamp ? stamp.name + ' ' : ''}${def.name}`, 'cyan');
   saveRun();
   updateUI();
 }
@@ -127,6 +158,7 @@ export function sellItem(kind, index) {
   if (run.phase !== Phase.SHOP) return;
 
   let def;
+  let edition = null;
   if (kind === ItemKind.DIE) {
     if (run.dice.length <= MIN_DICE) return; // the pool has a floor
     def = DICE[run.dice[index]];
@@ -135,15 +167,17 @@ export function sellItem(kind, index) {
   } else if (kind === ItemKind.ARTIFACT) {
     const id = run.artifacts[index];
     def = ARTIFACTS[id];
+    edition = run.editions[id] || null; // read before it goes: it sets the price
     run.artifacts.splice(index, 1);
     delete run.stacks[id]; // a re-bought artifact starts counting again
+    delete run.editions[id];
   } else {
     def = ABILITIES[run.abilities[index]];
     run.abilities.splice(index, 1);
   }
   if (!def) return;
 
-  const value = sellValueOf(def);
+  const value = sellValueOf(def, edition);
   run.scrap += value;
   sfx.coin();
   log(`> sold ${def.name} for ${value} scrap`, 'dim');

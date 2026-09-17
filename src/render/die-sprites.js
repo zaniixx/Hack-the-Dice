@@ -14,6 +14,14 @@ const EDGE = '#07060f';
 const cache = new Map();
 
 /**
+ * The face of a die that has no value of its own.
+ *
+ * A MIRROR DIE is blank until the board settles and it has something to copy,
+ * so its own roll is never shown — it does not have one.
+ */
+export const BLANK_FACE = 0;
+
+/**
  * Decorations that make a special die recognisable at a glance. Keyed by die
  * type; a die without an entry here is simply undecorated.
  */
@@ -89,9 +97,13 @@ export function dieSprite(type, value) {
   MARKINGS[type]?.(ctx, { light, dark, color: def.color });
 
   ctx.fillStyle = EDGE;
-  if (def.faces === 6) {
-    for (const [x, y] of PIP_LAYOUTS[value] || []) ctx.fillRect(x, y, 2, 2);
+  if (!value) {
+    // BLANK_FACE: body and markings, and nothing to read off it.
+  } else if (PIP_LAYOUTS[value] && def.faces === 6) {
+    for (const [x, y] of PIP_LAYOUTS[value]) ctx.fillRect(x, y, 2, 2);
   } else {
+    // Digits, for a die with more faces than there are pip layouts — and for a
+    // six-sided MIRROR DIE showing a value it copied off a d12 or a d20.
     drawDigits(ctx, value);
   }
 
@@ -124,9 +136,11 @@ export function dieIconURL(type) {
   const cached = iconURLs.get(type);
   if (cached) return cached;
 
-  // Show a face that reads well: five pips, or the die's top number.
-  const faces = DICE[type].faces;
-  const url = dieSprite(type, faces === 6 ? 5 : faces).toDataURL();
+  // Show a face that reads well: five pips, or the die's top number. A die
+  // that mirrors has no face of its own, so it is shown as it plays: blank.
+  const def = DICE[type];
+  const face = def.mirrors ? BLANK_FACE : (def.faces === 6 ? 5 : def.faces);
+  const url = dieSprite(type, face).toDataURL();
   iconURLs.set(type, url);
   return url;
 }

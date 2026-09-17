@@ -7,6 +7,10 @@
  * changes between a beginner run and a brutal one.
  *
  *   firewallScale    multiplier on every node's firewall strength
+ *   firewallRamp     compounded per server on top of that, so the gap between
+ *                    tiers opens up as a run gets deep instead of staying a
+ *                    flat percentage from node one
+ *   artifactSlots    cyberartifacts the rig can hold
  *   executes         attempts per node before the trace lands
  *   rerolls          rerolls granted by each roll
  *   startingScrap    data scrap the run opens with
@@ -21,6 +25,8 @@ export const DIFFICULTIES = {
     color: '#b6ff3d',
     tagline: 'Borrowed exploits, copied from a forum. Loud, lucky, mostly harmless.',
     firewallScale: 0.75,
+    firewallRamp: 0.94,
+    artifactSlots: 5,
     executes: 5,
     rerolls: 3,
     startingScrap: 8,
@@ -33,6 +39,8 @@ export const DIFFICULTIES = {
     color: '#3df2ff',
     tagline: 'Authorised, methodical, and on the clock. The standard engagement.',
     firewallScale: 1,
+    firewallRamp: 1,
+    artifactSlots: 5,
     executes: 4,
     rerolls: 2,
     startingScrap: 4,
@@ -45,6 +53,8 @@ export const DIFFICULTIES = {
     color: '#ffc23d',
     tagline: 'No authorisation, no safety net, and a market that smells desperation.',
     firewallScale: 1.5,
+    firewallRamp: 1.06,
+    artifactSlots: 5,
     executes: 4,
     rerolls: 2,
     startingScrap: 3,
@@ -57,6 +67,8 @@ export const DIFFICULTIES = {
     color: '#ff4d6d',
     tagline: 'Advanced persistent threat. Unlimited budget, zero margin for error.',
     firewallScale: 2.2,
+    firewallRamp: 1.12,
+    artifactSlots: 4,
     executes: 3,
     rerolls: 1,
     startingScrap: 2,
@@ -92,6 +104,8 @@ export function difficultySummary(id) {
   const def = difficultyOf(id);
   return [
     delta(def.firewallScale, 'Firewalls'),
+    delta(def.firewallRamp, 'Per server'),
+    `${def.artifactSlots} artifact slots`,
     `${def.executes} executes`,
     `${def.rerolls} reroll${def.rerolls === 1 ? '' : 's'}`,
     delta(def.priceScale, 'Prices'),

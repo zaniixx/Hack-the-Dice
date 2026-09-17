@@ -5,6 +5,7 @@
  * disabled — so the player can plan what to buy while they play.
  */
 import { definitionOf, KIND_LABELS, ItemKind } from '../data/catalog.js';
+import { EDITIONS } from '../data/editions.js';
 import { iconURL } from '../render/icon-sprites.js';
 import { dieIconURL } from '../render/die-sprites.js';
 import { run, Phase } from '../game/state.js';
@@ -18,20 +19,30 @@ function cardHTML(item, index, { open }) {
   if (!def) return '';
 
   const icon = item.kind === ItemKind.DIE ? dieIconURL(item.id) : iconURL(item.id, def.color);
-  const cost = priceOf(def);
+  const edition = EDITIONS[item.edition];
+  const cost = priceOf(def, item.edition);
   const affordable = run.scrap >= cost;
   const buyClass = affordable && !item.sold ? 'lime' : '';
   const price = `BUY <img class="sc" src="${scrapIcon()}" alt="">${cost}`;
 
-  return `<div class="card t${def.tier} ${item.sold ? 'sold' : ''}">
+  // A stamped card says so twice: on the kind line, and as a rider under the
+  // artifact's own text, because the two are priced together but read apart.
+  const kind = edition
+    ? `<span class="ed">${edition.name}</span> ${KIND_LABELS[item.kind]}`
+    : `${KIND_LABELS[item.kind]}, tier ${def.tier}`;
+  const rider = edition ? `<div class="ds ed-note">${edition.desc}</div>` : '';
+
+  return `<div class="card t${def.tier} ${item.sold ? 'sold' : ''}${edition ? ' stamped' : ''}"
+               style="--ed:${edition ? edition.color : 'transparent'}">
     <div class="top">
       <img src="${icon}" alt="">
       <div>
         <div class="nm">${def.name}</div>
-        <div class="kd">${KIND_LABELS[item.kind]}, tier ${def.tier}</div>
+        <div class="kd">${kind}</div>
       </div>
     </div>
     <div class="ds">${def.desc}</div>
+    ${rider}
     <button class="btn sm buy ${buyClass}" data-buy="${index}" ${item.sold || !open ? 'disabled' : ''}>
       ${item.sold ? 'INSTALLED' : price}
     </button>

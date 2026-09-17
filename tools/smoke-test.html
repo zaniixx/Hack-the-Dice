@@ -27,12 +27,16 @@ import { countPairs, longestStraight } from '../src/data/combos.js';
 import { ARTIFACTS } from '../src/data/artifacts.js';
 import { ABILITIES } from '../src/data/abilities.js';
 import { definitionOf, idsOf, ItemKind } from '../src/data/catalog.js';
-import { nodeHP } from '../src/data/enemies.js';
-import { BOSSES, BOSS_ORDER, bossForServer } from '../src/data/bosses.js';
+import { MAX_TIER } from '../src/data/rules.js';
+import { ICON_PATTERNS } from '../src/data/icons.js';
+import { nodeHP, serverScale, SERVER_STEP, SERVER_ACCEL } from '../src/data/enemies.js';
+import { EDITIONS, isKnownEdition, editionChance, slotsFrom } from '../src/data/editions.js';
+import { BOSSES, BOSS_ORDER, bossForServer, bossOrderFor } from '../src/data/bosses.js';
 import { CORPS, corpName, corpFor } from '../src/data/corps.js';
 import { ENEMY_SPRITES } from '../src/render/enemy-sprites.js';
 import { applyScoringValues, comboTags, isAbsorbed } from '../src/game/scoring.js';
-import { dieSprite, dieIconURL } from '../src/render/die-sprites.js';
+import { dieSprite, dieIconURL, BLANK_FACE } from '../src/render/die-sprites.js';
+import { DICE, mirrorSource } from '../src/data/dice.js';
 import { iconURL } from '../src/render/icon-sprites.js';
 import * as board from '../src/engine/dice-board.js';
 import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, difficultySummary } from '../src/data/difficulty.js';
@@ -43,7 +47,10 @@ import {
 import {
   seedRun, restoreRng, rngState, gameInt, normaliseSeed, randomSeed,
 } from '../src/core/game-random.js';
-import { compareEntries } from '../src/services/store.js';
+import { compareEntries, store, storeScope } from '../src/services/store.js';
+import { localStore } from '../src/services/local-store.js';
+import { remoteStore } from '../src/services/remote-store.js';
+import { hasRemoteBoard, API_BASE } from '../src/services/config.js';
 import { moodFor } from '../src/game/soundtrack.js';
 import { sfx } from '../src/audio/sfx.js';
 
@@ -73,17 +80,57 @@ try {
 
   check('catalog sizes',
     [idsOf(ItemKind.DIE).length, idsOf(ItemKind.ARTIFACT).length, idsOf(ItemKind.ABILITY).length],
-    [8, 19, 6]);
+    [13, 19, 11]);
+
+  // Every tier up to the last has to have something in it, in all three
+  // catalogs, or a server that unlocks a tier unlocks nothing.
+  const tiersIn = catalog => [...new Set(Object.values(catalog).map(def => def.tier))].sort();
+  check('dice reach the top tier', tiersIn(DICE), [1, 2, 3, 4]);
+  check('abilities reach it too', tiersIn(ABILITIES), [1, 2, 3, 4]);
+  check('the market stocks no higher than the catalogs go',
+    Math.max(...Object.values(DICE).map(d => d.tier),
+      ...Object.values(ABILITIES).map(a => a.tier),
+      ...Object.values(ARTIFACTS).map(a => a.tier)), MAX_TIER);
+  check('a deeper tier always costs more',
+    [1, 2, 3].every(tier => {
+      const below = Object.values(DICE).filter(d => d.tier === tier).map(d => d.cost);
+      const above = Object.values(DICE).filter(d => d.tier === tier + 1).map(d => d.cost);
+      return Math.max(...below) < Math.max(...above);
+    }), true);
+  check('every ability has an icon',
+    Object.keys(ABILITIES).every(id => ICON_PATTERNS[id]), true);
+  check('a die that scores twice says so',
+    Object.values(DICE).filter(d => d.retriggers).map(d => d.name), ['CHRONO DIE']);
   check('definitionOf', definitionOf({ kind: 'art', id: 'quantum' }).name, 'QUANTUM CORE');
   check('definitionOf unknown', definitionOf({ kind: 'nope', id: 'x' }), undefined);
 
   check('nodeHP first node', nodeHP(1, 1), 40);
   check('nodeHP boss', nodeHP(1, 5), Math.round(40 * Math.pow(1.55, 4) * 2.2));
-  check('nodeHP server 2', nodeHP(2, 1), 280);
+  check('nodeHP server 2', nodeHP(2, 1), Math.round(40 * SERVER_STEP));
+
+  // The firewall curve has to accelerate, not just climb: each server's step up
+  // must be bigger than the one before it, or a compounding rig outgrows it.
+  const steps = [2, 3, 4, 5, 6, 7].map(s => serverScale(s) / serverScale(s - 1));
+  check('each server steps up by more than the last one did',
+    steps.every((step, i) => i === 0 || step > steps[i - 1]), true);
+  check('the step widens by SERVER_ACCEL', steps[1] / steps[0], SERVER_ACCEL);
+  check('server 1 is still the tutorial it was', [nodeHP(1, 1), nodeHP(1, 5)], [40, 508]);
   check('corpName wraps', corpName(7), 'OMNIDYNE MK2');
-  check('bosses come in order', [1, 2, 3, 4, 5].map(bossForServer),
-    ['antivirus', 'encryption', 'watchdog', 'throttle', 'wraith']);
-  check('the boss list wraps', bossForServer(BOSS_ORDER.length + 1), BOSS_ORDER[0]);
+  // Boss order is drawn from the run's seed, so a second run of the same seed
+  // meets the same protocols in the same places and a different seed does not.
+  const lap = seed => [1, 2, 3, 4, 5, 6, 7, 8].map(s => bossForServer(s, seed));
+  check('a seed decides the boss order', lap('ABC123'), lap('ABC123'));
+  check('a different seed gets a different order',
+    lap('ABC123').join() !== lap('RACE1').join(), true);
+  check('every protocol is met once before any is met twice',
+    new Set(lap('ABC123')).size, BOSS_ORDER.length);
+  check('the second lap is not a repeat of the first',
+    [9, 10, 11, 12, 13, 14, 15, 16].map(s => bossForServer(s, 'ABC123')).join()
+      !== lap('ABC123').join(), true);
+  check('an order is a permutation of the catalog',
+    [...bossOrderFor('ABC123')].sort(), [...BOSS_ORDER].sort());
+  check('a blank seed still gives a whole lap',
+    new Set(lap('')).size, BOSS_ORDER.length);
 
   // Every boss has to be playable: a rule to read, and a face to show.
   check('there are eight bosses', BOSS_ORDER.length, 8);
@@ -126,15 +173,74 @@ try {
   check('miner', ARTIFACTS.miner.bonus(tally)[0].value, 2);
   check('zero day', ARTIFACTS.zeroday.multiplier(tally)[0].value, 2);
   check('kernel panic needs all 4+', ARTIFACTS.kernel.multiplier(tally), []);
-  check('blockchain stacks', ARTIFACTS.blockchain.stack(tally.run), '\u00d72');
+  check('blockchain compounds', ARTIFACTS.blockchain.multiplier(tally)[0].value,
+    Math.pow(1.15, 4));
+  check('blockchain stacks', ARTIFACTS.blockchain.stack(tally.run), '\u00d71.75');
   check("moore's law", ARTIFACTS.moore.multiplier(tally)[0].value, 8);
   check('trojan on first execute', ARTIFACTS.trojan.multiplier(tally)[0].value, 2);
-  check('singularity uses server', ARTIFACTS.singularity.multiplier(tally)[0].value, 3);
+  check('singularity compounds with server',
+    ARTIFACTS.singularity.multiplier(tally)[0].value, Math.pow(1.6, 2));
+  check('singularity does nothing on server 1',
+    ARTIFACTS.singularity.multiplier({ run: { server: 1 } }), []);
 
-  // Mirror dice copy the highest other value.
+  // Editions: every stamp either pays into an execute or widens the rig, and
+  // charges for it. One that did neither would be a dead card in the market.
+  const stamps = Object.keys(EDITIONS);
+  check('four editions', stamps.length, 4);
+  check('every edition pays or makes room',
+    stamps.every(id => EDITIONS[id].flat || EDITIONS[id].late || EDITIONS[id].slots), true);
+  check('every edition costs more than a plain one',
+    stamps.every(id => EDITIONS[id].priceScale > 1), true);
+  check('every edition has a tag, a colour and its own words',
+    stamps.every(id => EDITIONS[id].tag && /^#[0-9a-f]{6}$/i.test(EDITIONS[id].color)
+      && EDITIONS[id].desc), true);
+  check('encrypted pays bits', EDITIONS.encrypted.flat()[0], { type: 'bits', value: 30, label: undefined });
+  check('overclocked pays mult', EDITIONS.overclocked.flat()[0].type, 'mult');
+  check('prismatic multiplies late', EDITIONS.prismatic.late()[0], { type: 'xmult', value: 1.5, label: undefined });
+  check('only negative brings a slot',
+    stamps.filter(id => slotsFrom(id)), ['negative']);
+  check('an unknown stamp brings nothing', slotsFrom('holographic'), 0);
+  check('known editions', [isKnownEdition('prismatic'), isKnownEdition('nope')], [true, false]);
+  check('stamps get commoner with depth',
+    editionChance(4) > editionChance(1), true);
+  check('and the chance is capped', editionChance(99), 0.42);
+
+  // Mirror dice copy the highest other value, and say which one they copied so
+  // the board can draw it on them instead of a face they do not have.
   const pool = [{ type: 'mirror', value: 1 }, { type: 'd6', value: 5 }, { type: 'd8', value: 7 }];
   applyScoringValues(pool);
   check('mirror scores highest', pool.map(d => d.scoringValue), [7, 5, 7]);
+  check('and records what it is copying', pool[0].mirrorOf, 7);
+  check('the source is the die itself', mirrorSource(pool), pool[2]);
+  check('an ordinary die never gets one', pool[1].mirrorOf, undefined);
+
+  // Change the board and the mirror follows it, which is what makes it live.
+  pool[1].value = 12;
+  applyScoringValues(pool);
+  check('the mirror follows the new highest', [pool[0].mirrorOf, pool[0].scoringValue], [12, 12]);
+  check('and the source moves with it', mirrorSource(pool), pool[1]);
+
+  // Nothing to copy: it falls back to its own face rather than scoring nothing.
+  const allMirrors = [{ type: 'mirror', value: 4 }, { type: 'mirror', value: 2 }];
+  applyScoringValues(allMirrors);
+  check('with nothing to copy it uses its own face',
+    allMirrors.map(d => d.scoringValue), [4, 2]);
+  check('and shows that face', allMirrors.map(d => d.mirrorOf), [4, 2]);
+  check('no source when every die mirrors', mirrorSource(allMirrors), null);
+
+  // A blank face is a real, cached sprite, not a missing one.
+  check('a blank face renders', [dieSprite('mirror', BLANK_FACE).width, BLANK_FACE], [16, 0]);
+  check('blank is not the same sprite as a face',
+    dieSprite('mirror', BLANK_FACE) === dieSprite('mirror', 5), false);
+  check('a mirror die is blank on a shop card',
+    dieIconURL('mirror') === dieSprite('mirror', BLANK_FACE).toDataURL(), true);
+  check('an ordinary die is not',
+    dieIconURL('d6') === dieSprite('d6', BLANK_FACE).toDataURL(), false);
+  // A six-sided mirror can end up wearing a d20's 19, which has no pip layout.
+  check('a borrowed value too big for pips still draws',
+    dieSprite('mirror', 19).toDataURL() === dieSprite('mirror', BLANK_FACE).toDataURL(), false);
+  check('and is not confused with another borrowed value',
+    dieSprite('mirror', 19).toDataURL() === dieSprite('mirror', 12).toDataURL(), false);
   check('watchdog absorbs low', isAbsorbed({ scoringValue: 3 }, { boss: 'watchdog' }), true);
   check('watchdog spares high', isAbsorbed({ scoringValue: 4 }, { boss: 'watchdog' }), false);
 
@@ -143,9 +249,40 @@ try {
   const ctx = { dice, run: { rerolls: 0 }, log: () => {}, notify: () => {}, popDie: () => {} };
   ABILITIES.bitshift.use(ctx);
   check('bit shift skips locked', dice.map(d => d.value), [3, 5]);
+  ABILITIES.defrag.use(ctx);
+  check('defrag skips locked too, and caps at the face',
+    dice.map(d => d.value), [6, 5]);
   ABILITIES.exploit.use(ctx);
   check('exploit maxes lowest', dice[0].value, 6);
   check('ddos adds rerolls', (ABILITIES.ddos.use(ctx), ctx.run.rerolls), 2);
+
+  // Arming: a bigger multiplier wins, a smaller one is refused as a no-op.
+  const armCtx = { run: { overdrive: 1, overdriveLabel: '' }, log: () => {}, notify: () => {} };
+  ABILITIES.overdrive.use(armCtx);
+  check('overdrive arms x2', [armCtx.run.overdrive, armCtx.run.overdriveLabel], [2, 'OVERDRIVE']);
+  ABILITIES.sudo.use(armCtx);
+  check('sudo overrides it', [armCtx.run.overdrive, armCtx.run.overdriveLabel], [4, 'SUDO']);
+  check('and overdrive will not lower it', ABILITIES.overdrive.use(armCtx), false);
+  check('leaving sudo armed', armCtx.run.overdrive, 4);
+
+  // Tier 4 dice, where the late game does its damage.
+  check('kernel exploit maxes everything', (() => {
+    const pool = [{ type: 'd6', value: 2 }, { type: 'd20', value: 3 }];
+    ABILITIES.kexploit.use({ ...ctx, dice: pool });
+    return pool.map(d => d.value);
+  })(), [6, 20]);
+  check('polymorph is capped by each die', (() => {
+    const pool = [{ type: 'd6', value: 1 }, { type: 'd20', value: 17 }];
+    ABILITIES.polymorph.use({ ...ctx, dice: pool });
+    return pool.map(d => d.value);
+  })(), [6, 17]);
+  check('nova always multiplies', DICE.nova.lateMultiplier({ scoringValue: 1 }), 1.5);
+  check('daemon only on a 7 or 8',
+    [DICE.daemon.lateMultiplier({ scoringValue: 6 }), DICE.daemon.lateMultiplier({ scoringValue: 7 })],
+    [null, 2.5]);
+  check('tesseract adds flat mult', DICE.tesseract.onScore()[0].value, 4);
+  check('the biggest die is a fifty-sider', DICE.d50.faces, 50);
+  check('and its two-digit faces render', dieSprite('d50', 50).width, 16);
 
   // Sprites render to real canvases.
   check('die sprite size', [dieSprite('d20', 17).width, dieSprite('d20', 17).height], [16, 16]);
@@ -172,6 +309,11 @@ try {
     ['script-kiddie', 'pen-tester', 'black-hat', 'nation-state']);
   check('firewalls get harder',
     DIFFICULTY_ORDER.map(id => DIFFICULTIES[id].firewallScale), [0.75, 1, 1.5, 2.2]);
+  check('and get harder faster, the deeper a run gets',
+    DIFFICULTY_ORDER.map(id => DIFFICULTIES[id].firewallRamp), [0.94, 1, 1.06, 1.12]);
+  check('the hardest tier gives up a slot',
+    DIFFICULTY_ORDER.map(id => DIFFICULTIES[id].artifactSlots), [5, 5, 5, 4]);
+  check('a tier states its slots', difficultySummary('black-hat').includes('5 artifact slots'), true);
   check('unknown tier falls back', difficultyOf('nope').name, 'PEN TESTER');
   check('tier describes itself', difficultySummary('nation-state').includes('3 executes'), true);
 
@@ -232,6 +374,20 @@ try {
   check('a result code round trips',
     decodeResult(encodeResult({ id: 'x1', handle: 'NEO', score: 4200 })).score, 4200);
   check('a tournament code is not a result code', decodeResult(tournament.code), null);
+
+  // The two stores are interchangeable or they are not a seam at all: store.js
+  // swaps one for the other based on a URL, and nothing above it adapts.
+  const storeMethods = object => Object.keys(object).filter(key => typeof object[key] === 'function').sort();
+  check('the shared board implements the whole local interface',
+    storeMethods(localStore).filter(name => typeof remoteStore[name] !== 'function'), []);
+  check('and adds nothing the game would not find locally',
+    storeMethods(remoteStore).filter(name => typeof localStore[name] !== 'function'), []);
+  check('each store says what it is',
+    [localStore.scope, remoteStore.scope], ['device', 'global']);
+  check('a board is shared only when one is configured', hasRemoteBoard(), !!API_BASE);
+  check('and the game gets the one that matches',
+    store === (API_BASE ? remoteStore : localStore), true);
+  check('the scope the screens read agrees with it', storeScope, store.scope);
 
   // The soundtrack follows tension, not location.
   check('the menu has its own mood', moodFor({ phase: 'title' }), 'menu');

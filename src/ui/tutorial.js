@@ -51,8 +51,9 @@ const STEPS = [
   },
   {
     title: 'THE MARKET',
-    text: 'Breach a node and the black market opens. Spend scrap on dice, abilities and cyberartifacts.',
-    target: () => (isTouchLayout() ? els.rigButton : els.shop),
+    text: 'Breach a node and the market opens over the board. Spend scrap here, then breach the next node.',
+    // The market is a popup on every layout now, so both point at the cards.
+    target: () => els.shop,
     visible: () => run.phase === Phase.SHOP,
     dwell: 7,
   },
@@ -66,6 +67,31 @@ const coach = () => els.coach;
 
 function hide() {
   if (coach()) coach().hidden = true;
+}
+
+/** How much two rectangles overlap, in square pixels. */
+function overlapArea(a, b) {
+  const width = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const height = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  return width > 0 && height > 0 ? width * height : 0;
+}
+
+/**
+ * The controls the note must not sit on top of.
+ *
+ * Step 2 rings the board and the obvious place for its note is directly below —
+ * which is exactly where REROLL is. A note that covers the button it is telling
+ * you to press is worse than no note, so the candidate positions below are
+ * scored against these and the clearest one wins.
+ */
+function keepClear() {
+  return [
+    els.rollButton, els.rerollButton, els.executeButton, els.abilityBar,
+    els.artifactRow, els.bits.closest('.scorebar'),
+  ]
+    .filter(Boolean)
+    .map(el => el.getBoundingClientRect())
+    .filter(box => box.width && box.height);
 }
 
 /** Put the ring around the target and the note somewhere it fits. */
@@ -106,12 +132,42 @@ function place(step) {
   }
 
   const width = 360;
-  const below = box.bottom + 18;
-  const fitsBelow = below + 150 < innerHeight;
   note.style.width = `${width}px`;
-  note.style.left = `${Math.min(Math.max(12, box.left + box.width / 2 - width / 2), innerWidth - width - 12)}px`;
-  if (fitsBelow) note.style.top = `${below}px`;
-  else note.style.top = `${Math.max(12, box.top - 172)}px`;
+  const height = note.offsetHeight || 150;
+
+  const gap = 18;
+  const clamp = (value, max) => Math.min(Math.max(12, value), Math.max(12, max));
+  const centredLeft = clamp(box.left + box.width / 2 - width / 2, innerWidth - width - 12);
+  const centredTop = clamp(box.top + box.height / 2 - height / 2, innerHeight - height - 12);
+
+  // Below, above, right, left — in the order they usually read best.
+  const candidates = [
+    { left: centredLeft, top: box.bottom + gap },
+    { left: centredLeft, top: box.top - gap - height },
+    { left: box.right + gap, top: centredTop },
+    { left: box.left - gap - width, top: centredTop },
+  ];
+
+  const blocked = [...keepClear(), { left: box.left - pad, top: box.top - pad,
+    right: box.right + pad, bottom: box.bottom + pad }];
+
+  let best = null;
+  for (const spot of candidates) {
+    // A candidate that falls off screen is no candidate at all.
+    if (spot.left < 12 || spot.top < 12) continue;
+    if (spot.left + width > innerWidth - 12 || spot.top + height > innerHeight - 12) continue;
+
+    const rect = { left: spot.left, top: spot.top,
+      right: spot.left + width, bottom: spot.top + height };
+    const cost = blocked.reduce((total, other) => total + overlapArea(rect, other), 0);
+    if (!best || cost < best.cost) best = { ...spot, cost };
+    if (cost === 0) break; // nothing to improve on
+  }
+
+  // Everything overlaps something on a small window: take the least bad corner.
+  const spot = best || { left: centredLeft, top: clamp(box.bottom + gap, innerHeight - height - 12) };
+  note.style.left = `${spot.left}px`;
+  note.style.top = `${spot.top}px`;
 }
 
 function show(step) {

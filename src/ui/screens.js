@@ -5,9 +5,11 @@
  * Screens are presentation only. They take the numbers they display and the
  * actions their buttons should run, so they never reach into game state.
  */
-import { fmt } from '../core/format.js';
+import { fmt, fmtM } from '../core/format.js';
 import { corpName } from '../data/corps.js';
 import { difficultyOf } from '../data/difficulty.js';
+import { serverScale } from '../data/enemies.js';
+import { MAX_TIER } from '../data/rules.js';
 import { showModal } from './modal.js';
 
 /** The rules, shown in the menu and on the start screen. */
@@ -42,8 +44,8 @@ export function showMigrationScreen({ fromCorp, partingShot = '', server, onCont
     <p>${fromCorp} is yours. Migrating payload to <b>${corpName(server)}</b>, security tier ${server}.</p>
     <div class="xfer"><i></i></div>
     <div class="kv">Kept: <b>dice pool, abilities, cyberartifacts, data scrap</b></div>
-    <div class="kv">Firewalls: <b>7× stronger</b></div>
-    <div class="kv">Black market: <b>tier ${Math.min(3, server)} gear${extraArtifact}</b></div>`,
+    <div class="kv">Firewalls: <b>${fmtM(serverScale(server) / serverScale(server - 1))}× stronger</b></div>
+    <div class="kv">Black market: <b>tier ${Math.min(MAX_TIER, server)} gear${extraArtifact}</b></div>`,
     [{ text: 'OPEN BLACK MARKET', cls: 'lime', fn: onContinue }]);
 }
 

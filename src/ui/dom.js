@@ -79,8 +79,7 @@ export const els = {
 
   // Toolkit panel
   toolkit: $('#toolkit'),
-  shop: $('#shop'),
-  shopRefreshButton: $('#btnShopReroll'),
+  marketButton: $('#btnMarket'),
   nextNodeButton: $('#btnNext'),
   diceCount: $('#diceCount'),
   diceInventory: $('#diceInv'),
@@ -88,4 +87,12 @@ export const els = {
   abilityInventory: $('#abilInv'),
   artifactCount: $('#artCount'),
   artifactInventory: $('#artInv'),
+
+  // Black market popup
+  market: $('#market'),
+  marketScrap: $('#marketScrap'),
+  shop: $('#shop'),
+  shopRefreshButton: $('#btnShopReroll'),
+  marketCloseButton: $('#btnMarketClose'),
+  marketBreachButton: $('#btnMarketBreach'),
 };

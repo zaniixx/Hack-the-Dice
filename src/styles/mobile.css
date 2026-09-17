@@ -110,7 +110,7 @@
   .combo { font-size: 7px; }
 
   /* Artifacts are icons only at this width; the rig sheet lists them in full. */
-  .arts { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .arts { gap: 4px; }
   .art { min-height: 38px; padding: 2px; }
   .art img { width: 22px; height: 22px; }
   .art span { display: none; }
@@ -177,6 +177,22 @@
     background: rgba(5, 4, 12, .66);
   }
 
+  /* The market fills the screen on a phone: it is where the player is. */
+  .market {
+    padding: 0;
+    align-items: stretch;
+  }
+  .market-box {
+    width: 100%;
+    max-height: none;
+    padding: 10px calc(10px + env(safe-area-inset-right, 0px))
+             calc(10px + env(safe-area-inset-bottom, 0px))
+             calc(10px + env(safe-area-inset-top, 0px));
+    border-width: 0;
+  }
+  .market .shop { overscroll-behavior: contain; }
+  .market-head { font-size: 9px; }
+
   /* ---- Start screen: scrolls inside itself, never the page --------------- */
 
   .start-screen {
@@ -211,7 +227,6 @@
   }
 
   #enemy { max-height: 84px; }
-  .arts { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .art { min-height: 30px; }
   .art img { width: 18px; height: 18px; }
   .board-wrap { min-height: 90px; }

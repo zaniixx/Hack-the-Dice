@@ -1,4 +1,69 @@
-/* Right column: black market cards and rig inventory. */
+/* Right column: the rig inventory, and the black market popup over the game. */
+
+/* The market: a dialog over the board, not a column that is always there. */
+.market {
+  position:fixed;
+  inset:0;
+  z-index:59;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  background:rgba(5,4,12,.78);
+}
+.market[hidden] { display:none; }
+.market-box {
+  width:min(760px,100%);
+  max-height:min(88dvh,720px);
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  border-color:var(--mag);
+  box-shadow:inset 0 0 0 2px var(--screen-line),0 0 30px -8px var(--mag);
+}
+.market-box > * {
+  position:relative;
+  z-index:4;
+}
+.market-head {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-family:var(--px);
+  font-size:10px;
+  color:var(--mag);
+  border-bottom:1px solid var(--screen-line);
+  padding-bottom:8px;
+  flex-wrap:wrap;
+}
+.market-title { flex:none; }
+.market-scrap {
+  flex:1;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  font-size:9px;
+  color:var(--amber);
+}
+/* The cards scroll; the header and the breach button stay put. */
+.market .shop {
+  flex:1;
+  overflow-y:auto;
+  align-content:start;
+  padding-right:4px;
+  scrollbar-width:thin;
+  scrollbar-color:var(--screen-line) transparent;
+}
+
+/* Actions that act on the run, below the toolkit rather than inside it. */
+.panel-actions {
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  flex:none;
+}
+
 
 /* right: toolkit */
 .toolkit {
@@ -82,6 +147,23 @@
 }
 .card.t2 { border-color:#3d3070; }
 .card.t3 { border-color:#70305f; }
+.card.t4 { border-color:#8a6a1f; }
+/* A stamped card wears its edition's colour, whatever tier it is. */
+.card.stamped {
+  border-color:var(--ed);
+  box-shadow:0 0 12px -4px var(--ed);
+}
+.card .kd .ed,
+.row-item .t b .ed {
+  font-style:normal;
+  font-family:var(--px);
+  font-size:6px;
+  color:var(--ed);
+}
+.card .ed-note {
+  flex:none;
+  color:var(--ed);
+}
 .card.sold { opacity:.3; }
 .shop.locked .card {
   opacity:.35;

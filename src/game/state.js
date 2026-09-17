@@ -68,6 +68,8 @@ export function createRun({
     abilities: [],
     /** Per-artifact counters, for artifacts that grow over a run. */
     stacks: {},
+    /** The edition each artifact was bought wearing, keyed by artifact id. */
+    editions: {},
 
     // The current node
     enemy: null,
@@ -77,7 +79,9 @@ export function createRun({
     /** Ability charges remaining on this node, keyed by ability id. */
     charges: {},
     firstExecute: true,
-    overdrive: false,
+    /** xMult armed for the next Execute by an ability; 1 is none. */
+    overdrive: 1,
+    overdriveLabel: '',
     rolledOnce: false,
 
     // The black market
@@ -86,6 +90,8 @@ export function createRun({
 
     // For the run-over screen and the leaderboards
     stats: { dmg: 0, nodes: 0, biggest: 0, scrap: 0 },
+    /** Set when a run has been altered by hand; such a run is never banked. */
+    cheated: false,
   };
   return run;
 }

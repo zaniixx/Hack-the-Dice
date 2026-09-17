@@ -17,10 +17,15 @@ export function rankOf(board, entry) {
 /**
  * Record a finished run.
  *
+ * A run marked `cheated` is scored and shown as usual but never written to a
+ * board. The boards are shared between devices now, and one assembled rig would
+ * sit at the top of them forever.
+ *
  * @returns {{entry, rank, tournamentRank}} the entry and where it placed
  */
 export async function submitRun(run, { reason }) {
   const entry = runResult(run, { reason });
+  if (run.cheated) return { entry, rank: null, tournamentRank: null };
 
   await store.addScore(entry);
   const board = await store.listScores({ difficulty: entry.difficulty });

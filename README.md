@@ -32,19 +32,75 @@ the game boots is printed on screen rather than swallowed.
 
 **Threat levels.** Four tiers, named after who is doing the hacking and ramped
 green→red so the order reads before the words do: SCRIPT KIDDIE, PEN TESTER,
-BLACK HAT, NATION STATE. A tier sets firewall strength, executes per node,
-rerolls per roll, starting scrap, market prices and the score multiplier — all
-of it in `src/data/difficulty.js`, and all of it spelled out on the cards so the
-player knows what they are choosing.
+BLACK HAT, NATION STATE. A tier sets firewall strength, how fast firewalls ramp
+per server, artifact slots, executes per node, rerolls per roll, starting scrap,
+market prices and the score multiplier — all of it in `src/data/difficulty.js`,
+and all of it spelled out on the cards so the player knows what they are
+choosing. Because a tier scales the curve and not just the numbers, the gap
+between SCRIPT KIDDIE and NATION STATE opens up as a run gets deep: by server 8
+it is roughly ten to one.
 
-**Leaderboards.** Every run signs in with a handle and banks a score when it
-ends, whether it was traced or walked away from. Score is nodes breached,
-servers owned and scrap harvested, multiplied by the tier — deliberately not
-hacking power, which grows exponentially and would make one lucky build
-unbeatable forever. Boards filter by tier.
+**Four tiers of gear, and a fourth that only a deep run sees.** A tier unlocks
+on the server of the same number, so climbing is better hardware and not only
+bigger firewalls. Tier 4 opens on server 4: the D50 PENTACONTA for Bits, the
+NOVA DIE for ×Mult, the CHRONO DIE that scores twice and pays every perDie
+artifact twice with it, and SUDO and KERNEL EXPLOIT — the first abilities in the
+game above tier 2, which until now left the ability slot with nothing new to
+offer after server 3.
 
-**Eight boss protocols.** Node 5 of every server is guarded by one, and each
-breaks a different rule of the game:
+Tier 4 is worth roughly three times the best tier-3 pool, which is a gear step
+rather than an answer: flat +Mult multiplies everything the artifacts do after
+it, so a pool of +Mult dice compounds fast and the tier-4 versions are
+deliberately small steps up from VIRUS and QUBIT rather than large ones.
+
+**A difficulty curve that accelerates.** A rig compounds — MOORE'S LAW doubles
+on every migration, BLOCKCHAIN compounds per node breached and SINGULARITY per
+server — so firewalls that grew by a fixed multiple per server would be left
+behind as soon as a build came together, which is what makes a roguelike stop
+being a game once its early hurdles are passed. So the firewall curve
+accelerates too: each server's step up is wider than the one before it
+(`SERVER_STEP` and `SERVER_ACCEL` in `src/data/enemies.js`). Server 1 is
+unchanged as an on-ramp; by server 6 a good build is spending three of its four
+executes on a boss instead of one, and the numbers on screen are in the
+billions by the time a run ends.
+
+**Cyberartifact editions.** Slots are deliberately scarce — five by default,
+four on NATION STATE, against nineteen artifacts worth owning — so what goes in
+a slot matters more than how many you have. The black market answers that by
+stamping some artifacts with an edition, and stamps get commoner the deeper a
+run goes:
+
+| Edition | What it adds |
+| --- | --- |
+| ENCRYPTED | +30 Bits on every Execute |
+| OVERCLOCKED | +4 Mult on every Execute |
+| PRISMATIC | ×1.5 Mult on every Execute |
+| NEGATIVE | +1 artifact slot while installed |
+
+A stamp rides on top of whatever the artifact already does, is priced into the
+card, and is refunded when it is sold. NEGATIVE brings its own slot, so it is
+the one purchase a full rig never refuses — and the reason a run can end six
+artifacts deep instead of five.
+
+**Leaderboards, shared between devices.** Every run signs in with a handle and
+banks a score when it ends, whether it was traced or walked away from. Score is
+nodes breached, servers owned and scrap harvested, multiplied by the tier —
+deliberately not hacking power, which grows exponentially and would make one
+lucky build unbeatable forever. Boards filter by tier.
+
+The game is a static site, so there is nothing behind it to remember a score:
+boards used to live on whichever browser played them, and a phone and a laptop
+could not see each other's. [`worker/`](worker/) is the fix — one Cloudflare
+Worker over one KV namespace, holding the leaderboard, the tournaments, their
+boards and the runs in progress. Deploy it, put its URL in
+[`src/services/config.js`](src/services/config.js), and every device that opens
+the game is looking at the same standings. Leave it undeployed and everything
+works exactly as before, in the browser. See [worker/README.md](worker/README.md)
+for the three commands, and for what it does and does not promise about a score
+posted by someone who wants to cheat.
+
+**Eight boss protocols, in an order you do not know.** Node 5 of every server
+is guarded by one, and each breaks a different rule of the game:
 
 | Protocol | What it does |
 | --- | --- |
@@ -57,8 +113,21 @@ breaks a different rule of the game:
 | SANDBOX | Your abilities have no charges on this node |
 | REVENANT | The first time its firewall falls, it comes back at 40% |
 
-They cycle in that order as the run climbs servers, and a tournament host can
-ban any of them.
+Which one guards which server is shuffled from the run's seed. A fixed order
+made a run predictable the second time you played it — you knew server 3 was
+the WATCHDOG and could shop for it — so the order is drawn per seed instead,
+a fresh shuffle for every eight servers, which means you meet all eight before
+you meet any of them twice. Two players racing the same seed still meet the
+same protocols in the same places, and a tournament host can ban any of them.
+
+**An archive of what you have met.** ARCHIVE on the start screen lists every
+die, ability, cyberartifact and edition in the game, with the ones this device
+has come across filled in and the rest left as a dashed slot with a question
+mark on it. Being offered something in the black market counts, bought or not:
+what is worth remembering is that the thing exists. It is kept in the browser
+like the profile is, because it is a record of what you have played rather than
+a score anyone competes on — so it never goes near the shared board, and two
+people on one machine share one archive.
 
 **Corporations with personalities.** Each server belongs to a corp that names
 its own nodes and talks back: OMNIDYNE files your intrusion as a learning
@@ -75,6 +144,25 @@ lower and faster, and one execute left drops everything for a pulse. Moods
 change on the bar line, never mid-phrase. Each boss protocol also has its own
 sound — a scanner rejecting a die, a valve slamming shut, a vault counting your
 scrap out — so a rule firing is recognisable without reading the log.
+
+**The market is a popup, not a column.** The black market used to sit in the
+toolkit, permanently on screen and greyed out for most of a run, which is a lot
+of space for something you use between nodes. Now it opens over the board the
+moment a node is breached, on every layout, and closes when the next node
+starts. Escape, the backdrop, CLOSE or breaching the next node all get out of
+it, and OPEN MARKET brings it back — but only between nodes: during a fight
+there is no market, so there is no button offering one. The toolkit keeps what
+the market is not — your dice pool, your abilities and your cyberartifacts —
+with BREACH NODE below it rather than buried inside.
+
+**The MIRROR DIE has no face of its own.** It rolls blank, stays blank through
+the tumble, and then takes the highest value on the board: a line of marching
+dashes runs from the die it is copying, that die gets brackets around it, and
+the mirror flashes as the value lands on it. Change what the highest die is —
+reroll, BIT SHIFT, CLONE, lock something out of a throw — and the mirror
+follows within the frame, because the board watches what it is copying rather
+than waiting to be told. A mirror that ends up copying a d20 wears two digits
+instead of pips, since there is no such thing as nineteen pips.
 
 **Boss cutscenes.** A protocol coming online stops the game and introduces
 itself: its portrait animated by the same painter that draws it in the fight,
@@ -104,24 +192,30 @@ Each tournament keeps its own board.
 itself, so the tournament board shows runs in progress alongside finished ones,
 ranked by the score they would bank right now. Runners climb past each other as
 they breach nodes, rows slide to their new places, and a run settles in place
-when it ends. Several browser windows on one machine see each other live.
+when it ends. With the shared board deployed, that race is between devices —
+everyone in the room watches the same lobby from their own phone.
 
-Because the store is browser-local (see below), boards live on the device that
-played them. To pull results in from another device, a runner copies their
-result code after a run and the host merges it into the board.
+Without it, boards live on the device that played them: a runner copies their
+result code after a run and the host merges it into the board by hand.
 
 **On a phone or tablet** the game is a full-screen app: the shell is pinned to
 the viewport so nothing scrolls or rubber-bands, zoom is off so a mistimed
 double tap cannot wreck a roll, and the two panels that are not needed moment to
-moment — the console log and the toolkit — become sheets that slide up over the
-board. The market opens itself when a node is breached. There is a FULL button
-for real full screen where the browser offers it, and adding the game to a home
-screen removes the browser chrome entirely on iOS.
+moment — the console log and the rig — become sheets that slide up over the
+board. The market is the same popup it is everywhere else, filling the screen
+because that is where the player is. There is a FULL button for real full
+screen where the browser offers it, and adding the game to a home screen
+removes the browser chrome entirely on iOS.
 
 ### Running it for several people
 
-Serve on the network rather than on localhost, and the QR code carries a link
-that opens the game and joins the tournament in one scan:
+If the shared board is deployed (see [worker/](worker/)), everyone can simply
+open the published site on their own phone and they are already on the same
+leaderboard and in the same lobby.
+
+To run it off your own machine instead, serve on the network rather than on
+localhost, and the QR code carries a link that opens the game and joins the
+tournament in one scan:
 
 ```sh
 python3 -m http.server 8000 --bind 0.0.0.0
@@ -164,8 +258,9 @@ src/
                         full-screen touch layout
   core/                 dependency-free helpers: math, random, seeded random,
                         bit packing, format, storage, settings, speed-aware sleep
-  data/                 the game as data: dice, artifacts, abilities, bosses,
-                        corps, nodes, difficulty tiers, icons, tuning, effects
+  data/                 the game as data: dice, artifacts, artifact editions,
+                        abilities, bosses, corps, nodes, difficulty tiers,
+                        icons, tuning, effects
   audio/                synth.js (two voices, two buses), sfx.js (the sounds,
                         including one per boss) and music.js (the sequencer)
   engine/               dice-board.js — the 2.5D physics sandbox
@@ -173,13 +268,18 @@ src/
                         and a small QR encoder
   game/                 rules and flow: state, scoring, turn, execute, shop,
                         session, boss-rules, voice, soundtrack, memory-leak,
-                        difficulty, score, leaderboard, tournament, live-run, save
+                        difficulty, score, leaderboard, tournament, live-run,
+                        save, archive
   services/             where persistence lives: store.js picks a backend,
-                        local-store.js is the browser-local one
+                        local-store.js keeps boards in this browser,
+                        remote-store.js talks to the shared one, config.js
+                        is the single URL that decides which
   ui/                   the DOM: hud, log, fx, modals, screens, input, viewport,
-                        sheets, tutorial, and the start screen with its
-                        leaderboard, live board and tournament views
+                        sheets, market, tutorial, and the start screen with its
+                        leaderboard, live board, archive and tournament views
 assets/                 favicons and the social card the site links to
+worker/                 the shared board: a Cloudflare Worker over one KV
+                        namespace, and how to deploy it
 tools/                  test pages, a no-cache dev server, and the press tools:
                         poster.html, trailer.html, social-card.html, icon.html,
                         capture_server.py, trailer-music.py
@@ -204,6 +304,9 @@ amp: {
   lateMultiplier: die => (die.scoringValue === 6 ? 2 : null),
 },
 ```
+
+A die may also declare `retriggers`, which scores it a second time, and an
+ability may arm a ×Mult on the coming Execute rather than touching the dice.
 
 Adding content is a catalog entry plus, for artifacts and abilities, an 8×8 icon
 in `src/data/icons.js`. Nothing else changes — including the tournament ban
