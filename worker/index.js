@@ -26,6 +26,10 @@
  *   PUT    /api/live/:id                   heartbeat for a run in progress
  *   DELETE /api/live/:id
  *
+ * There is also a maintenance API under /api/admin, for taking things off the
+ * board that should not be on it. It is gated on a key this repository does not
+ * contain and answers 404 without one — see "Maintenance" below.
+ *
  * Deploying it: see worker/README.md.
  */
 
@@ -53,7 +57,7 @@ const KEYS = {
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -247,6 +251,205 @@ async function deleteLiveRun(env, request, id) {
   return json({ ok: true });
 }
 
+// ---- Maintenance -----------------------------------------------------------
+
+/*
+ * Everything under /api/admin can delete something that is not the caller's:
+ * a tournament somebody else hosted, a result somebody else posted. The board
+ * has no accounts to check that against, so it checks one secret instead — one
+ * the Worker holds and this repository does not:
+ *
+ *   npx wrangler secret put ADMIN_KEY
+ *
+ * Set nothing, or something short enough to guess, and there is no maintenance
+ * API at all: every route here answers 404, exactly as an address that is not
+ * there would. A wrong key answers 404 too, so probing cannot tell the
+ * difference between a bad key and no such endpoint.
+ *
+ * Reading the source tells you this exists. That is fine and unavoidable — the
+ * game is served from the same repository. What keeps the board safe is the key
+ * being secret and long, never this code being unread.
+ */
+
+/** Shorter than this is not a secret, it is a password someone will guess. */
+const MIN_ADMIN_KEY = 16;
+const ADMIN_HEADER = 'X-Admin-Key';
+
+/** Compared without an early exit, so the key cannot be found a byte at a time. */
+function sameSecret(given, wanted) {
+  if (given.length !== wanted.length) return false;
+  let diff = 0;
+  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ wanted.charCodeAt(i);
+  return diff === 0;
+}
+
+function isAdmin(env, request) {
+  const configured = String(env.ADMIN_KEY || '');
+  if (configured.length < MIN_ADMIN_KEY) return false;
+  return sameSecret(request.headers.get(ADMIN_HEADER) || '', configured);
+}
+
+/** Every run in progress for one tournament, gone. @returns {number} how many. */
+async function clearLiveRuns(env, tournamentId) {
+  const listed = await env.BOARDS.list({ prefix: `live:${tournamentId}:` });
+  await Promise.all(listed.keys.map(key => env.BOARDS.delete(key.name)));
+  return listed.keys.length;
+}
+
+/** What is on the board right now, in four numbers. */
+async function adminPing(env) {
+  const [scores, index, live] = await Promise.all([
+    readJSON(env, KEYS.scores, []),
+    readJSON(env, KEYS.tournamentIndex, []),
+    env.BOARDS.list({ prefix: 'live:' }),
+  ]);
+  return json({
+    ok: true,
+    scores: scores.length,
+    tournaments: index.length,
+    live: live.keys.length,
+  });
+}
+
+/**
+ * Every tournament on the board, with what hangs off it.
+ *
+ * Unlike the public listing this is not filtered by anything, because the point
+ * of it is to see what is out there — including rows whose tournament has since
+ * expired out of KV and left the index pointing at nothing.
+ */
+async function adminTournaments(env) {
+  const index = await readJSON(env, KEYS.tournamentIndex, []);
+  const rows = await Promise.all(index.map(async row => {
+    const [stored, board, live] = await Promise.all([
+      readJSON(env, KEYS.tournament(row.id), null),
+      readJSON(env, KEYS.tournamentScores(row.id), []),
+      env.BOARDS.list({ prefix: `live:${row.id}:` }),
+    ]);
+    return { ...row, scores: board.length, live: live.keys.length, expired: !stored };
+  }));
+  return json(rows);
+}
+
+/** Drop index rows whose tournament has expired, and the boards they left behind. */
+async function adminSweep(env) {
+  const index = await readJSON(env, KEYS.tournamentIndex, []);
+  const alive = [];
+  const dropped = [];
+  for (const row of index) {
+    if (await readJSON(env, KEYS.tournament(row.id), null)) alive.push(row);
+    else {
+      dropped.push(row.id);
+      await env.BOARDS.delete(KEYS.tournamentScores(row.id));
+      await clearLiveRuns(env, row.id);
+    }
+  }
+  if (dropped.length) await env.BOARDS.put(KEYS.tournamentIndex, JSON.stringify(alive));
+  return json({ ok: true, dropped });
+}
+
+/** A tournament off the board for everyone, host token or not. */
+async function adminDeleteTournament(env, id) {
+  const live = await clearLiveRuns(env, id);
+  await env.BOARDS.delete(KEYS.tournament(id));
+  await env.BOARDS.delete(KEYS.tournamentScores(id));
+  const index = await readJSON(env, KEYS.tournamentIndex, []);
+  await env.BOARDS.put(KEYS.tournamentIndex, JSON.stringify(index.filter(row => row.id !== id)));
+  return json({ ok: true, id, live });
+}
+
+/** One result off one board. */
+async function adminDropScore(env, key, entryId) {
+  const board = await readJSON(env, key, []);
+  const kept = board.filter(row => row.id !== entryId);
+  await env.BOARDS.put(key, JSON.stringify(kept));
+  return json({ ok: true, removed: board.length - kept.length });
+}
+
+/** A whole board, emptied. */
+async function adminWipeBoard(env, key, { removeKey = false } = {}) {
+  const board = await readJSON(env, key, []);
+  if (removeKey) await env.BOARDS.delete(key);
+  else await env.BOARDS.put(key, JSON.stringify([]));
+  return json({ ok: true, removed: board.length });
+}
+
+/**
+ * Every result posted under one handle, everywhere it was posted.
+ *
+ * A handle is a label, not an account, so this is a name sweep and nothing more
+ * — anyone else who typed the same one loses their rows too. It is the only
+ * honest way to do it on a board that has never known who anybody is.
+ */
+async function adminPurgeHandle(env, handle) {
+  const wanted = String(handle || '').toUpperCase().slice(0, 16);
+  if (!wanted) return fail(400, 'which handle?');
+  let removed = 0;
+
+  const board = await readJSON(env, KEYS.scores, []);
+  const kept = board.filter(row => row.handle !== wanted);
+  if (kept.length !== board.length) {
+    removed += board.length - kept.length;
+    await env.BOARDS.put(KEYS.scores, JSON.stringify(kept));
+  }
+
+  const index = await readJSON(env, KEYS.tournamentIndex, []);
+  for (const row of index) {
+    const key = KEYS.tournamentScores(row.id);
+    const tournamentBoard = await readJSON(env, key, []);
+    const tournamentKept = tournamentBoard.filter(entry => entry.handle !== wanted);
+    if (tournamentKept.length !== tournamentBoard.length) {
+      removed += tournamentBoard.length - tournamentKept.length;
+      await env.BOARDS.put(key, JSON.stringify(tournamentKept));
+    }
+  }
+
+  const listed = await env.BOARDS.list({ prefix: 'live:' });
+  for (const key of listed.keys) {
+    const entry = await env.BOARDS.get(key.name, 'json');
+    if (entry && entry.handle === wanted) {
+      await env.BOARDS.delete(key.name);
+      removed++;
+    }
+  }
+
+  return json({ ok: true, handle: wanted, removed });
+}
+
+async function adminRoute(env, parts, method) {
+  if (parts[0] === 'ping' && method === 'GET') return adminPing(env);
+  if (parts[0] === 'sweep' && method === 'POST') return adminSweep(env);
+
+  if (parts[0] === 'scores' && method === 'DELETE') {
+    if (parts.length === 1) return adminWipeBoard(env, KEYS.scores);
+    if (parts.length === 2) return adminDropScore(env, KEYS.scores, parts[1]);
+  }
+
+  if (parts[0] === 'handles' && parts.length === 2 && method === 'DELETE') {
+    return adminPurgeHandle(env, decodeURIComponent(parts[1]));
+  }
+
+  if (parts[0] === 'tournaments') {
+    if (parts.length === 1 && method === 'GET') return adminTournaments(env);
+
+    const id = (parts[1] || '').toUpperCase();
+    if (parts.length === 2 && method === 'DELETE') return adminDeleteTournament(env, id);
+    if (parts.length === 3 && method === 'DELETE') {
+      if (parts[2] === 'live') {
+        return json({ ok: true, removed: await clearLiveRuns(env, id) });
+      }
+      if (parts[2] === 'scores') {
+        return adminWipeBoard(env, KEYS.tournamentScores(id), { removeKey: true });
+      }
+    }
+    if (parts.length === 4 && parts[2] === 'scores' && method === 'DELETE') {
+      return adminDropScore(env, KEYS.tournamentScores(id), parts[3]);
+    }
+  }
+
+  return fail(404, 'no such endpoint');
+}
+
 // ---- Router ----------------------------------------------------------------
 
 /** Path segments after /api/, with empties dropped. */
@@ -261,6 +464,18 @@ async function route(request, env) {
 
   if (method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (!env.BOARDS) return fail(500, 'the BOARDS KV namespace is not bound');
+
+  /*
+   * Maintenance, before anything else.
+   *
+   * Ahead of the rate limit because clearing a board is a burst of writes by
+   * nature and being throttled halfway through would leave it half cleared.
+   * Without the key this branch is indistinguishable from a wrong address.
+   */
+  if (parts[0] === 'admin') {
+    if (!isAdmin(env, request)) return fail(404, 'no such endpoint');
+    return adminRoute(env, parts.slice(1), method);
+  }
 
   // Writes are budgeted; reads are not.
   if (method !== 'GET' && !(await withinRateLimit(env, request))) {

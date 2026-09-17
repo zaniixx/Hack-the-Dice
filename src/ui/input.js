@@ -213,7 +213,7 @@ function bindKeyboard(actions) {
  * Keys are also given a gap limit, so a digit pressed now and another pressed a
  * minute later are not treated as part of the same thing.
  */
-const SHELL_SEQUENCE = '1241320++';
+const SHELL_SEQUENCE = '1241320++'; //this reminds me of UNI
 const SHELL_KEY_GAP_MS = 1500;
 
 let shellBuffer = '';

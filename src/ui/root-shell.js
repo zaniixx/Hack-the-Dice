@@ -6,6 +6,13 @@
  * edition, jump to a given server or protocol, refill executes, bend the board,
  * and hand yourself as much scrap as a build needs.
  *
+ * Its last tab is the other half of that: the shared board, from the outside.
+ * Tournaments and results are public and permanent by design — a player can
+ * only remove what their own browser hosted — so this is where something comes
+ * off the board when there is nobody else to take it off. Those calls answer to
+ * a key the board holds and this repository does not; without one the tab reads
+ * the board and changes nothing. See services/root-api.js.
+ *
  * It is deliberately out of the way. Nothing imports this module at startup —
  * ui/input.js fetches it the first time the opening sequence is typed — so it
  * costs a request that a normal session never makes, appears in no markup, and
@@ -16,6 +23,7 @@
  * leaderboard. See game/leaderboard.js: a board full of runs assembled in here
  * would not be worth reading.
  */
+import { fmt } from '../core/format.js';
 import { DICE } from '../data/dice.js';
 import { ABILITIES } from '../data/abilities.js';
 import { ARTIFACTS } from '../data/artifacts.js';
@@ -30,6 +38,8 @@ import {
 } from '../game/archive.js';
 import { beginNode, breachNode } from '../game/session.js';
 import { refreshPreview } from '../game/turn.js';
+import { store } from '../services/store.js';
+import * as ops from '../services/root-api.js';
 import { log } from './log.js';
 import { toast } from './fx.js';
 import { updateUI } from './hud.js';
@@ -46,6 +56,33 @@ let topUpTimer = null;
 
 /** Cheats that have to be re-applied because the game keeps spending them. */
 const held = { scrap: false, executes: false };
+
+/** How long a destructive button stays armed before it forgets it was asked. */
+const ARM_MS = 4000;
+
+/** What the last look at the shared board found. Filled by refreshNet(). */
+const netState = {
+  checked: false,
+  busy: false,
+  error: '',
+  said: '',
+  counts: null,
+  tournaments: [],
+  scores: [],
+};
+
+/**
+ * What is typed into the board tab's fields.
+ *
+ * Kept out of the DOM because this panel redraws itself on a timer and on every
+ * answer from the board, and a redraw in the middle of typing a key would throw
+ * away the half of it that had been typed.
+ */
+const netDraft = { key: '', base: '', handle: '' };
+
+/** The destructive button waiting for its second click, if any. */
+let armed = '';
+let armTimer = null;
 
 export const isRootShellOpen = () => open;
 
@@ -226,9 +263,82 @@ function toggleHeld(name) {
   sync();
 }
 
+// ---- The shared board ------------------------------------------------------
+
+/**
+ * Ask twice before deleting anything other people can see.
+ *
+ * The first click arms the button, which says so; the second does it. A few
+ * seconds later it disarms itself, so a button left armed and come back to
+ * cannot be fired by a click meant for something else.
+ *
+ * @returns {boolean} true when this click is the one that should do the work.
+ */
+function confirmed(token) {
+  clearTimeout(armTimer);
+  if (armed === token) {
+    armed = '';
+    armTimer = null;
+    return true;
+  }
+  armed = token;
+  armTimer = setTimeout(() => {
+    armed = '';
+    render();
+  }, ARM_MS);
+  render();
+  return false;
+}
+
+/** Read the board again: the counts, every tournament, the leaderboard. */
+async function refreshNet() {
+  netState.busy = true;
+  render();
+
+  // The leaderboard is public, so it is read whether or not there is a key —
+  // seeing what is on the board is half of deciding what to take off it.
+  const [ping, scores] = await Promise.all([ops.boardPing(), store.listScores({ limit: 100 })]);
+  netState.counts = ping.ok ? ping.data : null;
+  netState.error = ping.ok ? '' : ping.error;
+  netState.scores = Array.isArray(scores) ? scores : [];
+
+  const tournaments = ping.ok ? await ops.allTournaments() : null;
+  netState.tournaments = tournaments && tournaments.ok ? tournaments.data || [] : [];
+
+  netState.checked = true;
+  netState.busy = false;
+  render();
+}
+
+/** How an answer from the board reads in one line. */
+function outcome(data) {
+  if (!data || typeof data !== 'object') return 'done';
+  if (typeof data.removed === 'number') return `removed ${data.removed}`;
+  if (Array.isArray(data.dropped)) return `dropped ${data.dropped.length}`;
+  return 'done';
+}
+
+/** Run one maintenance call, say what it did, and read the board back. */
+async function netAction(label, thunk) {
+  netState.busy = true;
+  render();
+  const result = await thunk();
+  netState.said = result.ok ? `${label}: ${outcome(result.data)}` : `${label} failed — ${result.error}`;
+  log('> root: ' + netState.said, 'mag');
+  await refreshNet();
+}
+
+/** The same, for the things that only touch this device and cannot fail. */
+function deviceAction(label, thunk) {
+  const said = thunk();
+  netState.said = said ? `${label}: ${said}` : label;
+  log('> root: ' + netState.said, 'mag');
+  render();
+}
+
 // ---- Rendering -------------------------------------------------------------
 
-const TABS = { rig: 'RIG', run: 'RUN', board: 'BOARD', archive: 'ARCHIVE' };
+const TABS = { rig: 'RIG', run: 'RUN', board: 'BOARD', archive: 'ARCHIVE', net: 'NET' };
 
 function catalogRows(catalog, kind) {
   return Object.entries(catalog).map(([id, def]) => `
@@ -390,15 +500,138 @@ function archiveTab() {
   </div>`;
 }
 
+const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+/** A button that has to be asked twice, showing which half of that it is in. */
+const danger = (token, label) =>
+  `<button class="rs-btn rs-x ${armed === token ? 'rs-armed' : ''}" data-net="${token}">${
+    armed === token ? 'SURE?' : label}</button>`;
+
+/**
+ * The shared board: what is on it, and what can be taken off it.
+ *
+ * Works without a run, like the archive, because none of it is about one. It
+ * also works without the maintenance key — the leaderboard is public — and then
+ * simply cannot change anything, which every failed button says plainly.
+ */
+function netTab() {
+  const { base, override } = ops.boardTarget();
+  const known = new Set(ops.knownTournamentIds());
+  const hasKey = !!ops.adminKey();
+
+  const status = netState.busy ? 'reading the board…'
+    : netState.error ? netState.error
+      : netState.counts
+        ? `${plural(netState.counts.scores, 'result')} · ` +
+          `${plural(netState.counts.tournaments, 'tournament')} · ${netState.counts.live} running`
+        : hasKey ? 'not read yet' : 'no key on this device';
+
+  const tournamentRows = netState.tournaments.map(row => `
+    <div class="rs-item">
+      <div class="rs-row">
+        <span class="rs-name" title="host ${escape(row.host || '?')} · seed ${escape(row.seed || '?')}">
+          ${escape(row.id)} ${escape(row.name || '')}</span>
+        <span class="rs-tier">${row.scores || 0} done · ${row.live || 0} live${
+          row.expired ? ' · EXPIRED' : ''}</span>
+      </div>
+      <div class="rs-wrap">
+        <button class="rs-btn ${known.has(row.id) ? 'rs-on' : ''}" data-net="know:${row.id}">
+          ${known.has(row.id) ? 'VISIBLE HERE' : 'SHOW HERE'}</button>
+        <button class="rs-btn" data-net="lobby:${row.id}">CLEAR LOBBY</button>
+        ${danger('tboard:' + row.id, 'CLEAR BOARD')}
+        ${danger('twipe:' + row.id, 'DELETE EVERYWHERE')}
+      </div>
+    </div>`).join('') || `<div class="rs-note">${
+    netState.checked ? 'Nothing on the board, or no key to list it with.' : 'Not read yet.'}</div>`;
+
+  const scoreRows = netState.scores.map((entry, i) => `
+    <div class="rs-row">
+      <span class="rs-tier">${i + 1}</span>
+      <span class="rs-name" title="${escape(entry.id || '')} · ${escape(entry.difficulty || '')} · server ${
+  entry.server || 0}">
+        ${escape(entry.handle || '?')} · ${escape(fmt(entry.score || 0))}${
+  entry.tournament ? ' · ' + escape(entry.tournament) : ''}</span>
+      <button class="rs-btn rs-x" data-net="drop:${escape(entry.id || '')}">DROP</button>
+    </div>`).join('') || '<div class="rs-note">The leaderboard is empty.</div>';
+
+  const deviceRows = ops.deviceKeys().map(key => `
+    <div class="rs-row">
+      <span class="rs-name">${escape(key.name)}</span>
+      <span class="rs-tier">${key.size}b</span>
+      <button class="rs-btn rs-x" data-net="key-drop:${escape(key.name)}">DROP</button>
+    </div>`).join('');
+
+  return `<div class="rs-cols">
+    <section>
+      <h4>BOARD</h4>
+      <div class="rs-note">${escape(base || 'no board configured')}</div>
+      <div class="rs-wrap">
+        <input class="rs-num rs-wide" type="password" data-draft="key"
+               placeholder="maintenance key" value="${escape(netDraft.key)}">
+        <button class="rs-btn" data-net="save-key">USE KEY</button>
+        <button class="rs-btn" data-net="refresh">REFRESH</button>
+      </div>
+      <div class="rs-note">${escape(status)}</div>
+      ${netState.said ? `<div class="rs-note rs-said">${escape(netState.said)}</div>` : ''}
+
+      <h4>POINTED AT</h4>
+      <div class="rs-wrap">
+        <input class="rs-num rs-wide" type="text" data-draft="base"
+               placeholder="https://…" value="${escape(netDraft.base)}">
+        <button class="rs-btn" data-net="save-base">SET</button>
+        <button class="rs-btn rs-x" data-net="clear-base">BUILT IN</button>
+      </div>
+      <div class="rs-note">${override
+    ? 'Overridden on this device. '
+    : 'Using the address in services/config.js. '}Either way it is read once, at
+        load, so this takes a reload.</div>
+
+      <h4>THIS DEVICE</h4>
+      <div class="rs-wrap">${danger('forget-all', 'FORGET ALL TOURNAMENTS')}</div>
+      <div class="rs-note">Only here: they stay on the board, this device stops
+        listing them.</div>
+      ${deviceRows}
+    </section>
+
+    <section>
+      <h4>TOURNAMENTS</h4>
+      <div class="rs-note">Every one on the board, not just the ones this device
+        was let into.</div>
+      ${tournamentRows}
+      <div class="rs-wrap" style="margin-top:6px">
+        <button class="rs-btn" data-net="sweep">SWEEP EXPIRED</button>
+      </div>
+    </section>
+
+    <section>
+      <h4>LEADERBOARD</h4>
+      <div class="rs-wrap">
+        <input class="rs-num rs-wide" type="text" data-draft="handle"
+               placeholder="handle" maxlength="16" value="${escape(netDraft.handle)}">
+        ${danger('purge', 'PURGE HANDLE')}
+        ${danger('wipe-scores', 'WIPE BOARD')}
+      </div>
+      <div class="rs-note">A handle is a label, not an account: purging one takes
+        every run posted under that name, from here and from every tournament
+        board, whoever played them.</div>
+      ${scoreRows}
+    </section>
+  </div>`;
+}
+
 function render() {
   if (!panel || !open) return;
   const body = panel.querySelector('.rs-body');
   for (const button of panel.querySelectorAll('[data-tab]')) {
     button.classList.toggle('rs-on', button.dataset.tab === tab);
   }
-  // The archive is the device's, not the run's, so it needs neither.
+  // Neither the archive nor the board belongs to a run, so neither needs one.
   if (tab === 'archive') {
     body.innerHTML = archiveTab();
+    return;
+  }
+  if (tab === 'net') {
+    body.innerHTML = netTab();
     return;
   }
   if (!run || run.phase === Phase.TITLE) {
@@ -410,13 +643,106 @@ function render() {
 
 // ---- Wiring ----------------------------------------------------------------
 
+/** Opening the board tab: fill its fields from this device, then read the board. */
+function primeNet() {
+  netDraft.key = ops.adminKey();
+  netDraft.base = ops.boardTarget().override;
+  if (!netState.checked && !netState.busy) void refreshNet();
+}
+
+function onNetClick(action) {
+  const at = action.indexOf(':');
+  const verb = at === -1 ? action : action.slice(0, at);
+  const value = at === -1 ? '' : action.slice(at + 1);
+
+  switch (verb) {
+    case 'save-key':
+      ops.setAdminKey(netDraft.key);
+      netState.said = netDraft.key ? 'key saved on this device' : 'key cleared';
+      return void refreshNet();
+
+    case 'refresh':
+      return void refreshNet();
+
+    case 'save-base':
+      ops.setBoardTarget(netDraft.base);
+      return deviceAction('pointed at ' + (netDraft.base || 'the built-in board'),
+        () => 'reload to use it');
+
+    case 'clear-base':
+      ops.setBoardTarget('');
+      netDraft.base = '';
+      return deviceAction('back to the built-in board', () => 'reload to use it');
+
+    case 'sweep':
+      return void netAction('sweep', () => ops.sweepExpired());
+
+    // Local only: whether this device lists a tournament it did not host.
+    case 'know':
+      if (ops.knownTournamentIds().includes(value)) {
+        ops.forgetTournament(value);
+        return deviceAction(value + ' hidden here', () => '');
+      }
+      ops.rememberTournament(value);
+      return deviceAction(value + ' now listed here', () => '');
+
+    case 'lobby':
+      return void netAction('clear ' + value + ' lobby', () => ops.clearTournamentLobby(value));
+
+    case 'tboard':
+      if (!confirmed(action)) return;
+      return void netAction('clear ' + value + ' board', () => ops.clearTournamentBoard(value));
+
+    case 'twipe':
+      if (!confirmed(action)) return;
+      return void netAction('delete ' + value, () => ops.wipeTournament(value));
+
+    case 'drop':
+      return void netAction('drop result', () => ops.dropScore(value));
+
+    case 'purge': {
+      const handle = netDraft.handle.trim().toUpperCase();
+      if (!handle) return toast('TYPE A HANDLE FIRST');
+      if (!confirmed(action)) return;
+      return void netAction('purge ' + handle, () => ops.purgeHandle(handle));
+    }
+
+    case 'wipe-scores':
+      if (!confirmed(action)) return;
+      return void netAction('wipe the leaderboard', () => ops.clearScores());
+
+    case 'forget-all':
+      if (!confirmed(action)) return;
+      return deviceAction('forgot every tournament here',
+        () => ops.forgetAllTournaments() + ' dropped');
+
+    case 'key-drop':
+      return deviceAction('dropped ' + value, () => {
+        ops.dropDeviceKey(value);
+        if (value === 'htd_admin_key') netDraft.key = '';
+        return '';
+      });
+
+    default:
+      return;
+  }
+}
+
 function onClick(event) {
   const button = event.target.closest('button');
   if (!button) return;
   const d = button.dataset;
 
-  if (d.tab) { tab = d.tab; render(); return; }
+  if (d.tab) {
+    tab = d.tab;
+    armed = '';
+    if (tab === 'net') primeNet();
+    render();
+    return;
+  }
   if (d.close !== undefined) { closeRootShell(); return; }
+
+  if (d.net) { onNetClick(d.net); return; }
 
   // The archive is not part of a run, so this neither needs one nor flags one.
   if (d.archive) {
@@ -470,6 +796,17 @@ function onClick(event) {
     touch('+5 rerolls');
     sync();
   }
+}
+
+/**
+ * Keep the board tab's fields in a draft rather than in the DOM.
+ *
+ * This panel redraws whole tabs, so a redraw arriving while a key is half typed
+ * would take the typed half with it.
+ */
+function onInput(event) {
+  const field = event.target.dataset.draft;
+  if (field !== undefined) netDraft[field] = event.target.value;
 }
 
 function onChange(event) {
@@ -530,9 +867,13 @@ function build() {
     .rs-btn.rs-on { background:#b6ff3d; border-color:#b6ff3d; color:#07060f; }
     .rs-btn.rs-x { border-color:#ff4d6d; color:#ff4d6d; }
     .rs-btn.rs-x:hover { background:#ff4d6d; color:#07060f; }
+    .rs-btn.rs-armed { background:#ff4d6d; border-color:#ff4d6d; color:#07060f; }
     .rs-ed, .rs-num { background:#07060f; border:1px solid #3d3070; color:#dfe6ff;
                       font-family:ui-monospace,monospace; font-size:11px; padding:2px 3px; }
     .rs-num { width:54px; }
+    .rs-wide { width:100%; flex:1 1 140px; }
+    .rs-item { padding:4px 0; border-top:1px solid #1b1733; }
+    .rs-said { color:#b6ff3d; }
     .rs-field { display:flex; align-items:center; gap:4px; font-size:7px; color:#7d84ad; }
   `;
 
@@ -540,6 +881,7 @@ function build() {
   document.body.appendChild(panel);
   panel.addEventListener('click', onClick);
   panel.addEventListener('change', onChange);
+  panel.addEventListener('input', onInput);
 }
 
 // ---- Open and close --------------------------------------------------------
@@ -548,6 +890,7 @@ export function openRootShell() {
   if (!panel) build();
   open = true;
   panel.hidden = false;
+  if (tab === 'net') primeNet();
   render();
   if (!topUpTimer) topUpTimer = setInterval(topUp, TOPUP_MS);
   log('> root shell attached', 'mag');
@@ -555,6 +898,11 @@ export function openRootShell() {
 
 export function closeRootShell() {
   open = false;
+  // Nothing stays armed across a close: reopening should not find a button one
+  // click away from deleting a board.
+  armed = '';
+  clearTimeout(armTimer);
+  armTimer = null;
   if (panel) panel.hidden = true;
   if (topUpTimer) clearInterval(topUpTimer);
   topUpTimer = null;

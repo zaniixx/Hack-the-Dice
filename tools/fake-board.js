@@ -15,6 +15,15 @@
 /** The address the fake board answers on. Nothing actually listens there. */
 export const FAKE_BOARD_URL = 'http://fake-board.test';
 
+/**
+ * The maintenance key this board accepts.
+ *
+ * Long enough to clear the Worker's own minimum, because a fake board that
+ * accepted a key the real one would reject is a fake board that hides a bug.
+ * The real key lives in `wrangler secret` and appears nowhere in the tree.
+ */
+export const FAKE_ADMIN_KEY = 'fake-board-admin-key-0000';
+
 const MAX_BOARD_SIZE = 100;
 
 /** Arcade ranking, as the Worker sorts it. */
@@ -77,11 +86,111 @@ export function installFakeBoard() {
   const json = (body, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-  function route(url, method, body) {
+  /**
+   * The maintenance API, as the Worker gates it: no key or the wrong key and
+   * the whole branch answers 404, so nothing can tell it apart from a typo.
+   */
+  function adminRoute(parts, method, key) {
+    if (key !== FAKE_ADMIN_KEY) return json({ error: 'no such endpoint' }, 404);
+    const id = (parts[1] || '').toUpperCase();
+
+    const liveKeysFor = prefix =>
+      [...state.live.keys()].filter(name => name.startsWith(prefix));
+
+    const drop = (board, entryId) => board.filter(row => row.id !== entryId);
+
+    if (parts[0] === 'ping' && method === 'GET') {
+      return json({
+        ok: true,
+        scores: state.scores.length,
+        tournaments: state.tournaments.size,
+        live: state.live.size,
+      });
+    }
+
+    if (parts[0] === 'sweep' && method === 'POST') return json({ ok: true, dropped: [] });
+
+    if (parts[0] === 'scores' && method === 'DELETE') {
+      if (parts.length === 1) {
+        const removed = state.scores.length;
+        state.scores = [];
+        return json({ ok: true, removed });
+      }
+      if (parts.length === 2) {
+        const before = state.scores.length;
+        state.scores = drop(state.scores, parts[1]);
+        return json({ ok: true, removed: before - state.scores.length });
+      }
+    }
+
+    if (parts[0] === 'handles' && parts.length === 2 && method === 'DELETE') {
+      const wanted = decodeURIComponent(parts[1]).toUpperCase();
+      let removed = 0;
+      const before = state.scores.length;
+      state.scores = state.scores.filter(row => row.handle !== wanted);
+      removed += before - state.scores.length;
+      // Over the index, as the Worker does — not over every board in memory.
+      // A tournament board the index has lost is not reachable there either.
+      for (const tid of state.tournaments.keys()) {
+        const board = state.tournamentScores.get(tid) || [];
+        const kept = board.filter(row => row.handle !== wanted);
+        removed += board.length - kept.length;
+        state.tournamentScores.set(tid, kept);
+      }
+      for (const [name, entry] of [...state.live]) {
+        if (entry.handle === wanted) {
+          state.live.delete(name);
+          removed++;
+        }
+      }
+      return json({ ok: true, handle: wanted, removed });
+    }
+
+    if (parts[0] === 'tournaments') {
+      if (parts.length === 1 && method === 'GET') {
+        return json([...state.tournaments.values()].map(({ secret, ...rest }) => ({
+          ...rest,
+          scores: (state.tournamentScores.get(rest.id) || []).length,
+          live: liveKeysFor(rest.id + ':').length,
+          expired: false,
+        })));
+      }
+      if (parts.length === 2 && method === 'DELETE') {
+        const live = liveKeysFor(id + ':');
+        live.forEach(name => state.live.delete(name));
+        state.tournaments.delete(id);
+        state.tournamentScores.delete(id);
+        return json({ ok: true, id, live: live.length });
+      }
+      if (parts.length === 3 && method === 'DELETE') {
+        if (parts[2] === 'live') {
+          const live = liveKeysFor(id + ':');
+          live.forEach(name => state.live.delete(name));
+          return json({ ok: true, removed: live.length });
+        }
+        if (parts[2] === 'scores') {
+          const removed = (state.tournamentScores.get(id) || []).length;
+          state.tournamentScores.delete(id);
+          return json({ ok: true, removed });
+        }
+      }
+      if (parts.length === 4 && parts[2] === 'scores' && method === 'DELETE') {
+        const board = state.tournamentScores.get(id) || [];
+        const kept = drop(board, parts[3]);
+        state.tournamentScores.set(id, kept);
+        return json({ ok: true, removed: board.length - kept.length });
+      }
+    }
+
+    return json({ error: 'no such endpoint' }, 404);
+  }
+
+  function route(url, method, body, key) {
     const parts = url.pathname.split('/').filter(Boolean).slice(1);
     const id = (parts[1] || '').toUpperCase();
 
     if (parts[0] === 'health') return json({ ok: true, scope: 'global' });
+    if (parts[0] === 'admin') return adminRoute(parts.slice(1), method, key);
 
     if (parts[0] === 'scores' && parts.length === 1) {
       if (method === 'GET') {
@@ -173,7 +282,9 @@ export function installFakeBoard() {
 
     const url = new URL(href);
     const body = init.body ? JSON.parse(init.body) : null;
-    return route(url, (init.method || 'GET').toUpperCase(), body);
+    const headers = new Headers(init.headers || {});
+    return route(url, (init.method || 'GET').toUpperCase(), body,
+      headers.get('X-Admin-Key') || '');
   };
 
   return {

@@ -63,11 +63,12 @@ import {
   localStore, knownTournamentIds, rememberTournament, forgetTournament,
 } from '../src/services/local-store.js';
 import { remoteStore } from '../src/services/remote-store.js';
+import * as ops from '../src/services/root-api.js';
 import { hasRemoteBoard, API_BASE } from '../src/services/config.js';
 import { moodFor } from '../src/game/soundtrack.js';
 import { sfx } from '../src/audio/sfx.js';
 
-import { installFakeBoard, FAKE_BOARD_URL } from './fake-board.js';
+import { installFakeBoard, FAKE_BOARD_URL, FAKE_ADMIN_KEY } from './fake-board.js';
 
 /** Serves the board this suite was pointed at, in memory. */
 const fakeBoard = installFakeBoard();
@@ -440,6 +441,102 @@ try {
     knownTournamentIds().filter(id => id === 'ZZTOP').length, 1);
   forgetTournament('ZZTOP');
   check('leaving one drops it', knownTournamentIds().includes('ZZTOP'), false);
+
+  /*
+   * The maintenance API.
+   *
+   * Everything a player can delete, they can delete because their own browser
+   * can prove it put it there. This is the other set of calls — the ones that
+   * take a tournament somebody else hosted, or a result somebody else posted,
+   * off the board for everyone — and the only thing standing in front of them
+   * is a key that lives on the board and not in this repository.
+   */
+  const savedKey = ops.adminKey();
+
+  ops.setAdminKey('');
+  check('with no key there is nothing to call',
+    (await ops.boardPing()).error, 'no key on this device');
+
+  ops.setAdminKey('a-wrong-key-of-the-right-length');
+  const refused = await ops.boardPing();
+  check('a wrong key is refused', refused.ok, false);
+  check('and the board will not say whether the key or the address was wrong',
+    refused.error.includes('key refused'), true);
+
+  ops.setAdminKey(FAKE_ADMIN_KEY);
+  const ping = await ops.boardPing();
+  check('the right key reads the board', ping.ok, true);
+  check('and it answers in counts',
+    ['scores', 'tournaments', 'live'].every(k => typeof ping.data[k] === 'number'), true);
+
+  // A tournament this device did not host, put there the way another device
+  // would have: with a host token of its own.
+  await fetch(FAKE_BOARD_URL + '/api/tournaments/OTHERS', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'NOT MINE', host: 'THEM', code: tournament.code,
+      difficulty: 'pen-tester', seed: 'AAAAA', secret: 'their-own-host-token',
+    }),
+  });
+  check('a tournament hosted elsewhere is on the board',
+    !!(await store.getTournament('OTHERS')), true);
+  await store.deleteTournament('OTHERS');
+  check('and the ordinary delete cannot touch it',
+    !!(await store.getTournament('OTHERS')), true);
+  check('maintenance takes it off for everyone', (await ops.wipeTournament('OTHERS')).ok, true);
+  check('and then it is gone', await store.getTournament('OTHERS'), null);
+
+  // One result off the global board, by the id of the run that made it.
+  await store.addScore({
+    id: 'drop-me', handle: 'NOBODY', score: 5, difficulty: 'pen-tester', server: 1, node: 1,
+  });
+  check('a result is on the board',
+    (await store.listScores({})).some(row => row.id === 'drop-me'), true);
+  check('and can be dropped by id', (await ops.dropScore('drop-me')).data.removed, 1);
+  check('leaving the rest alone',
+    (await store.listScores({})).some(row => row.id === 'drop-me'), false);
+
+  /*
+   * Purging a handle reaches every board, not just the global one.
+   *
+   * It is a name sweep and nothing more: a handle is a label a player types,
+   * and the board has never known who anybody is, so anyone else who used the
+   * same one goes with them. That is what makes it the honest version of
+   * "delete this player's runs" and why it is worth checking it really does
+   * reach the tournament boards too.
+   */
+  await store.saveTournament(tournament);
+  await store.addScore({
+    id: 'ghost-1', handle: 'GHOST', score: 900, difficulty: 'pen-tester', server: 3, node: 1,
+  });
+  await store.addTournamentScore(tournament.id, {
+    id: 'ghost-2', handle: 'GHOST', score: 800, difficulty: 'black-hat', server: 2, node: 1,
+  });
+  await store.addTournamentScore(tournament.id, {
+    id: 'keeper', handle: 'SOMEONE', score: 700, difficulty: 'black-hat', server: 2, node: 1,
+  });
+  const purged = await ops.purgeHandle('ghost');
+  check('purging a handle takes both of its runs', purged.data.removed, 2);
+  check('off the global board',
+    (await store.listScores({})).some(row => row.handle === 'GHOST'), false);
+  check('and off the tournament board',
+    (await store.listTournamentScores(tournament.id)).some(row => row.handle === 'GHOST'), false);
+  check('leaving everyone else on it',
+    (await store.listTournamentScores(tournament.id)).map(row => row.handle), ['SOMEONE']);
+
+  // Showing or hiding a tournament is this device's business, and stays here.
+  const listed = (await ops.allTournaments()).data.map(row => row.id);
+  check('maintenance lists every tournament, invited or not',
+    listed.includes(tournament.id), true);
+  ops.forgetTournament(tournament.id);
+  check('hiding one here does not take it off the board',
+    !!(await store.getTournament(tournament.id)), true);
+  ops.rememberTournament(tournament.id);
+  check('and it can be shown here again',
+    knownTournamentIds().includes(tournament.id), true);
+
+  ops.setAdminKey(savedKey);
 
   /*
    * QR format information.
