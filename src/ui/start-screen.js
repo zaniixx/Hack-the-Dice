@@ -23,7 +23,7 @@ import {
 import { topScores, tournamentScores } from '../game/leaderboard.js';
 import { els } from './dom.js';
 import { toast } from './fx.js';
-import { HOW_TO_PLAY } from './screens.js';
+import { howToPlay } from './screens.js';
 import { difficultyCardsHTML } from './difficulty-view.js';
 import { boardHTML, difficultyTabsHTML } from './leaderboard-view.js';
 import { archiveHTML } from './archive-view.js';
@@ -265,7 +265,7 @@ function howHTML() {
       <h2>HOW TO HACK</h2>
       <button class="btn sm" data-action="view:home">BACK</button>
     </div>
-    ${HOW_TO_PLAY}
+    ${howToPlay()}
   </div>`;
 }
 

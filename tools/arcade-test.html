@@ -198,6 +198,57 @@ try {
   settle();
   check('tier sets rerolls', state.run.rerolls, 1);
 
+  /*
+   * Rebinding.
+   *
+   * The model on its own would pass while the game still listened for the old
+   * key, so this presses the keys: a real keydown through the real handler,
+   * against a run that is actually in progress.
+   */
+  section('Keys can be moved');
+  const keys = await import('../src/core/keybinds.js');
+  // This page shares storage with the game, so whatever the player has set is
+  // put back at the end rather than reset out from under them.
+  const savedBinds = { ...keys.binds };
+  const press = code =>
+    dispatchEvent(new KeyboardEvent('keydown', { code, key: code, bubbles: true }));
+
+  check('a key starts where the defaults put it', keys.binds.reroll, 'KeyR');
+  check('and the game knows what it is for', keys.actionFor('KeyR'), 'reroll');
+
+  keys.bindKey('reroll', 'KeyQ');
+  check('moving it takes the action with it',
+    [keys.actionFor('KeyQ'), keys.actionFor('KeyR')], ['reroll', null]);
+
+  const rerollsBefore = state.run.rerolls;
+  press('KeyQ');
+  await tick();
+  settle();
+  check('and the game listens to the new key', state.run.rerolls, rerollsBefore - 1);
+
+  press('KeyR');
+  await tick();
+  check('while the old one has stopped doing anything', state.run.rerolls, rerollsBefore - 1);
+
+  // Putting one key on two actions swaps them, so neither is left with none.
+  keys.bindKey('throw', 'KeyQ');
+  check('a key already in use is swapped, not stolen',
+    [keys.binds.throw, keys.binds.reroll], ['KeyQ', 'Space']);
+
+  check('a reserved key is refused', keys.bindKey('throw', 'Escape').ok, false);
+  check('and refusing one changes nothing', keys.binds.throw, 'KeyQ');
+  check('a modifier on its own binds nothing', keys.bindKey('throw', 'ShiftLeft').ok, false);
+
+  keys.resetBinds();
+  check('reset puts every one of them back',
+    [keys.binds.throw, keys.binds.reroll, keys.binds.ability1], ['Space', 'KeyR', 'Digit1']);
+  check('a key prints as the key, not as its code',
+    ['KeyR', 'Space', 'Digit1', 'ArrowUp', ''].map(keys.keyLabel),
+    ['R', 'SPACE', '1', '↑', '—']);
+
+  for (const [id, code] of Object.entries(savedBinds)) keys.bindKey(id, code);
+  check('this suite left the real bindings alone', { ...keys.binds }, savedBinds);
+
   section('Score and leaderboard');
   state.run.stats.nodes = 3;
   state.run.stats.scrap = 20;

@@ -95,6 +95,26 @@
   color: var(--screen);
 }
 
+/* A note under a section heading, before its rows start. */
+.set-hint {
+  margin: 0 0 4px;
+  font-family: var(--vt);
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--dim);
+}
+
+/*
+ * A key binding. The width is held steady across both states so a row does not
+ * jump when it starts listening — the label goes from "R" to "PRESS KEY".
+ */
+.set-key { min-width: 104px; }
+.set-key.listening {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  color: var(--screen);
+}
+
 .set-value {
   min-width: 46px;
   text-align: right;

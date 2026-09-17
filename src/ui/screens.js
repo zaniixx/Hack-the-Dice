@@ -10,13 +10,21 @@ import { corpName } from '../data/corps.js';
 import { difficultyOf } from '../data/difficulty.js';
 import { serverScale } from '../data/enemies.js';
 import { MAX_TIER } from '../data/rules.js';
+import { labelFor } from '../core/keybinds.js';
 import { showModal } from './modal.js';
 
-/** The rules, shown in the menu and on the start screen. */
-export const HOW_TO_PLAY = `<div class="how">
-  <div><b>ROLL</b>Throw your dice pool onto the board. Space works too.</div>
+/**
+ * The rules, shown in help and on the start screen.
+ *
+ * A function rather than a constant because it names keys, and the keys are the
+ * player's to move — see core/keybinds.js. Printed from a constant it would go
+ * on saying Space long after somebody had put ROLL somewhere else.
+ */
+export const howToPlay = () => `<div class="how">
+  <div><b>ROLL</b>Throw your dice pool onto the board. ${labelFor('throw')} works too.</div>
   <div><b>LOCK</b>Click dice you want to keep, then <b>REROLL</b> the rest.</div>
-  <div><b>ABILITIES</b>Keys 1–3 bend the dice before you commit. Each has limited charges per node.</div>
+  <div><b>ABILITIES</b>${labelFor('ability1')}, ${labelFor('ability2')} and ${labelFor('ability3')}
+    bend the dice before you commit. Each has limited charges per node.</div>
   <div><b>EXECUTE</b>Bits × Mult hits the firewall. Run out of executes and the trace finds you.</div>
   <div><b>MARKET</b>Spend data scrap between nodes on dice, abilities and cyberartifacts. Unused executes pay a bonus.</div>
   <div><b>ORDER</b>Cyberartifacts pay out left to right, each one finishing before the next starts. Drag them: +Mult belongs to the left of ×Mult, or it never gets multiplied.</div>
@@ -40,7 +48,7 @@ export function showHelpScreen({ busy, canRestart, onRestart, onTutorial }) {
   const waitNote = busy
     ? '<p class="dim">Wait for the current action to finish to leave the run.</p>'
     : '';
-  showModal(`<div class="mtitle">HOW TO HACK</div>${HOW_TO_PLAY}${waitNote}`, buttons);
+  showModal(`<div class="mtitle">HOW TO HACK</div>${howToPlay()}${waitNote}`, buttons);
 }
 
 /** Shown after a boss falls, while the run moves up to the next server. */

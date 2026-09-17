@@ -5,6 +5,7 @@
  * game logic, so the input map can be read on its own and the game never
  * depends on how it was triggered.
  */
+import { actionFor } from '../core/keybinds.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
 import { toast } from './fx.js';
@@ -176,29 +177,41 @@ function bindKeyboard(actions) {
     // Mid-sequence: those keys are being typed at something else.
     if (isTypingShellSequence()) return;
 
-    switch (true) {
-      case event.code === 'Space':
+    /*
+     * Which key does what is the player's, not this file's: core/keybinds.js
+     * holds it, and the settings screen changes it. What stays here is what
+     * each action means and when it is allowed — a key bound to the market
+     * still does nothing outside one.
+     */
+    const bound = actionFor(event.code);
+    switch (bound) {
+      case 'throw':
         event.preventDefault();
         if (run.phase === Phase.READY) actions.roll();
         else if (run.phase === Phase.MANIP) actions.execute();
         break;
-      case event.code === 'KeyR':
+      case 'reroll':
         actions.reroll();
         break;
-      case event.code === 'KeyE':
+      case 'execute':
         actions.execute();
         break;
-      case event.code === 'Enter' && run.phase === Phase.SHOP:
+      case 'next':
+        if (run.phase !== Phase.SHOP) break;
         event.preventDefault();
         els.nextNodeButton.click();
         break;
-      case event.code === 'KeyM' && run.phase === Phase.SHOP:
+      case 'market':
+        if (run.phase !== Phase.SHOP) break;
         if (isMarketOpen()) closeMarket();
         else openMarket();
         break;
-      case /^Digit[1-3]$/.test(event.code):
-        actions.useAbility(run.abilities[+event.code.slice(5) - 1]);
+      case 'ability1':
+      case 'ability2':
+      case 'ability3':
+        actions.useAbility(run.abilities[+bound.slice(-1) - 1]);
         break;
+      default:
     }
   });
 }

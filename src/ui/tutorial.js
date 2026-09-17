@@ -13,6 +13,7 @@ import { dice } from '../engine/dice-board.js';
 import { store } from '../services/store.js';
 import { run, Phase } from '../game/state.js';
 import { els } from './dom.js';
+import { labelFor } from '../core/keybinds.js';
 import { isTouchLayout, uiScale } from './viewport.js';
 
 /**
@@ -23,7 +24,7 @@ import { isTouchLayout, uiScale } from './viewport.js';
 const STEPS = [
   {
     title: 'YOUR POOL',
-    text: 'Five dice. Throw them at the firewall — tap ROLL, or press Space.',
+    text: () => `Five dice. Throw them at the firewall — tap ROLL, or press ${labelFor('throw')}.`,
     target: () => els.rollButton,
     visible: () => run.phase === Phase.READY && !run.rolledOnce,
     complete: () => run.rolledOnce,
@@ -203,7 +204,9 @@ function place(step) {
 
 function show(step) {
   els.coachTitle.textContent = step.title;
-  els.coachText.textContent = step.text;
+  // A step whose wording depends on something — a key the player may have
+  // moved — gives a function instead of a string.
+  els.coachText.textContent = typeof step.text === 'function' ? step.text() : step.text;
   els.coachStep.textContent = `${index + 1} / ${STEPS.length}`;
   coach().hidden = false;
   place(step);

@@ -70,6 +70,7 @@ import {
   DEFAULTS, SPEEDS, SCALE_MIN, SCALE_MAX,
 } from '../src/core/settings.js';
 import { maxUiScale, uiScale, TOUCH_WIDTH } from '../src/ui/viewport.js';
+import { binds, ACTIONS, ACTION_IDS, RESERVED, keyLabel } from '../src/core/keybinds.js';
 import { moodFor } from '../src/game/soundtrack.js';
 import { sfx } from '../src/audio/sfx.js';
 
@@ -642,6 +643,27 @@ try {
   Object.assign(settings, savedSettings);
   saveSettings();
   check('this suite left the real settings alone', { ...settings }, savedSettings);
+
+  /*
+   * Key bindings, as they come back out of storage.
+   *
+   * The rebinder cannot produce two actions on one key or an action on Escape,
+   * but the stored blob is a line of JSON a player can edit, so what matters is
+   * what survives being read back. These are invariants of whatever is in there
+   * rather than of any particular binding.
+   */
+  check('every action has a binding entry',
+    ACTION_IDS.every(id => typeof binds[id] === 'string'), true);
+  check('no two actions answer to the same key',
+    new Set(ACTION_IDS.map(id => binds[id]).filter(Boolean)).size,
+    ACTION_IDS.filter(id => binds[id]).length);
+  check('nothing sits on a key the game reserves',
+    ACTION_IDS.some(id => RESERVED.has(binds[id])), false);
+  check('every action says what it is, for the settings screen',
+    ACTION_IDS.every(id => ACTIONS[id].name && ACTIONS[id].help), true);
+  check('codes print as the key on the keyboard',
+    ['KeyR', 'Space', 'Digit1', 'Numpad5', 'Comma'].map(keyLabel),
+    ['R', 'SPACE', '1', 'NUM 5', ',']);
 
   // The soundtrack follows tension, not location.
   check('the menu has its own mood', moodFor({ phase: 'title' }), 'menu');

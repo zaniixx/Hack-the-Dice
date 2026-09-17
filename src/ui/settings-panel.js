@@ -18,6 +18,9 @@
 import {
   settings, setSetting, resetSettings, SPEEDS, SCALE_MIN, SCALE_MAX, SCALE_STEP,
 } from '../core/settings.js';
+import {
+  ACTIONS, ACTION_IDS, binds, bindKey, resetBinds, keyLabel, isModifier,
+} from '../core/keybinds.js';
 import { store } from '../services/store.js';
 import { canFullscreen, toggleFullscreen, maxUiScale, uiScale } from './viewport.js';
 import { applySettings } from './appearance.js';
@@ -26,6 +29,8 @@ import { toast } from './fx.js';
 
 let panel = null;
 let open = false;
+/** The action waiting for a key, while the screen is listening for one. */
+let listening = null;
 
 export const isSettingsOpen = () => open;
 
@@ -52,6 +57,16 @@ const choice = (key, options, current) => options.map(([value, text]) =>
 const toggle = (key, value, on = 'ON', off = 'OFF') => `
   <button class="btn sm ${value ? 'on' : ''}" data-set="flag:${key}:1">${escape(on)}</button>
   <button class="btn sm ${value ? '' : 'on'}" data-set="flag:${key}:0">${escape(off)}</button>`;
+
+/**
+ * The key an action sits on, and the way to change it.
+ *
+ * Clicking it starts listening; the next key pressed is the new binding. The
+ * button keeps its width in both states so the row does not jump about as one
+ * is being set.
+ */
+const keyButton = id => `<button class="btn sm set-key ${listening === id ? 'listening' : ''}"
+  data-set="bind:${id}">${listening === id ? 'PRESS KEY' : escape(keyLabel(binds[id]))}</button>`;
 
 /**
  * A slider, with the number beside it.
@@ -122,6 +137,14 @@ function bodyHTML() {
     ${row('TUTORIAL', 'Walks through a first node again on your next run',
     '<button class="btn sm" data-set="tutorial">SHOW AGAIN</button>')}
 
+    <h4 class="set-sec">CONTROLS</h4>
+    <p class="set-hint">Click a key, then press the one you want it moved to.
+      Escape cancels. A key already in use is swapped, so nothing is ever left
+      without one.</p>
+    ${ACTION_IDS.map(id => row(ACTIONS[id].name, ACTIONS[id].help, keyButton(id))).join('')}
+    ${row('DEFAULT KEYS', 'Puts every one of them back where it started',
+    '<button class="btn sm" data-set="rebind-reset">RESET CONTROLS</button>')}
+
     <div class="set-foot">
       <button class="btn sm" data-set="reset">RESET EVERYTHING</button>
       <span class="set-note">Kept on this device.</span>
@@ -191,6 +214,18 @@ function onClick(event) {
       })();
       return;
 
+    case 'bind':
+      listening = listening === key ? null : key;
+      render();
+      return;
+
+    case 'rebind-reset':
+      resetBinds();
+      listening = null;
+      render();
+      toast('CONTROLS RESET');
+      return;
+
     case 'reset':
       resetSettings();
       applySettings();
@@ -224,7 +259,38 @@ function onChange(event) {
 }
 
 function onKeydown(event) {
-  if (!open || event.key !== 'Escape') return;
+  if (!open) return;
+
+  /*
+   * Listening for a key to bind.
+   *
+   * Everything is swallowed while this is on, including the keys the game and
+   * the dev console watch for — pressing 1 to bind an ability should not also
+   * be the start of something else.
+   */
+  if (listening) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.code === 'Escape') {
+      listening = null;
+      render();
+      return;
+    }
+    // A modifier on its own is somebody still reaching for the key.
+    if (isModifier(event.code)) return;
+
+    const action = listening;
+    const result = bindKey(action, event.code);
+    listening = null;
+    render();
+
+    if (!result.ok) toast('THAT KEY IS SPOKEN FOR');
+    else if (result.swapped) toast(`SWAPPED WITH ${ACTIONS[result.swapped].name}`);
+    return;
+  }
+
+  if (event.key !== 'Escape') return;
   event.stopPropagation();
   closeSettings();
 }
@@ -262,6 +328,7 @@ function build() {
 export function openSettings() {
   if (!panel) build();
   open = true;
+  listening = null;
   panel.hidden = false;
   render();
   panel.querySelector('[data-set="close"]')?.focus({ preventScroll: true });
@@ -269,5 +336,6 @@ export function openSettings() {
 
 export function closeSettings() {
   open = false;
+  listening = null;
   if (panel) panel.hidden = true;
 }
