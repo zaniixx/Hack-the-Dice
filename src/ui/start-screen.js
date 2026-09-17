@@ -32,6 +32,7 @@ import {
   hostDraft, resetHostDraft, setHostDifficulty, toggleBan, captureHostForm,
   hostFormHTML, joinFormHTML, tournamentListHTML, tournamentDetailHTML,
 } from './tournament-view.js';
+import { openSettings } from './settings-panel.js';
 
 const MAX_HANDLE = 12;
 
@@ -112,7 +113,7 @@ function homeHTML() {
     : '';
 
   const resume = ctx.saved
-    ? `<button class="btn cyan" data-action="resume">RESUME S${ctx.saved.server} N${ctx.saved.node}</button>`
+    ? `<button class="btn cyan wide" data-action="resume">RESUME S${ctx.saved.server} N${ctx.saved.node}</button>`
     : '';
 
   return `<div class="start-inner">
@@ -146,12 +147,17 @@ function homeHTML() {
     </div>
 
     <div class="start-actions">
-      <button class="btn lime big" data-action="start">LOCK IN</button>
-      ${resume}
       <button class="btn" data-action="view:leaderboard">LEADERBOARD</button>
       <button class="btn" data-action="view:tournaments">TOURNAMENTS</button>
       <button class="btn" data-action="view:archive">ARCHIVE</button>
       <button class="btn sm" data-action="view:how">HOW TO HACK</button>
+      <button class="btn sm" data-action="settings">SETTINGS</button>
+    </div>
+
+    <!-- The buttons that start playing, under the ones that do not. -->
+    <div class="start-launch">
+      ${resume}
+      <button class="btn lime big wide" data-action="start">LOCK IN</button>
     </div>
 
     <p class="start-foot">${footNote()}</p>
@@ -296,6 +302,20 @@ async function render() {
   if (token !== renderToken) return; // superseded while we were loading
 
   root().innerHTML = html + cornerLinksHTML();
+
+  /*
+   * The corner links go at the end of the content column.
+   *
+   * They stay fixed to the corner on a screen with a corner to spare — nothing
+   * about that changes, because a fixed element is positioned against the
+   * viewport wherever it sits in the tree. But on a narrow one they stop
+   * floating, and then they need to be somewhere sensible in the flow rather
+   * than beside the column.
+   */
+  const inner = root().querySelector('.start-inner');
+  const links = root().querySelector('.corner-links');
+  if (inner && links) inner.appendChild(links);
+
   root().scrollTop = 0;
 
   if (view === 'tournament') watchLobby();
@@ -451,6 +471,9 @@ async function onClick(event) {
   const argument = rest.join(':');
 
   switch (action) {
+    case 'settings':
+      openSettings();
+      break;
     case 'start':
       await beginRun(null);
       break;

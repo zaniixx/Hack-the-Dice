@@ -1,6 +1,6 @@
 /**
- * Full-screen dialogs shown over a run: the menu, and the two screens that end
- * a server or a run. The start screen is bigger and lives in start-screen.js.
+ * Full-screen dialogs shown over a run: help, and the two screens that end a
+ * server or a run. The start screen is bigger and lives in start-screen.js.
  *
  * Screens are presentation only. They take the numbers they display and the
  * actions their buttons should run, so they never reach into game state.
@@ -24,7 +24,13 @@ export const HOW_TO_PLAY = `<div class="how">
   <div><b>SCORE</b>Nodes breached, servers owned and scrap harvested, multiplied by your threat level.</div>
 </div>`;
 
-export function showMenuScreen({ busy, canRestart, onRestart, onTutorial }) {
+/**
+ * What HELP in the top bar opens: how the game works, and the two things you
+ * might want to do about it. Settings are not in here — the gear beside it goes
+ * straight there, and a second way in would only make people look for the
+ * wrong one.
+ */
+export function showHelpScreen({ busy, canRestart, onRestart, onTutorial }) {
   const buttons = [{ text: 'CLOSE', cls: 'cyan' }];
   if (onTutorial && !busy) buttons.push({ text: 'REPLAY TUTORIAL', fn: onTutorial });
   if (canRestart) {

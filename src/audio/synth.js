@@ -38,13 +38,12 @@ export function initAudio(customContext = null) {
     context = customContext || new AudioCtor();
 
     master = context.createGain();
-    master.gain.value = settings.muted ? 0 : MASTER_VOLUME;
     master.connect(context.destination);
 
     // A separate bus, so the soundtrack can be quiet without muffling the game.
     music = context.createGain();
-    music.gain.value = settings.muted ? 0 : MUSIC_VOLUME;
     music.connect(context.destination);
+    setMuted();
 
     // One second of white noise, reused by every percussive sound.
     const length = context.sampleRate;
@@ -56,10 +55,23 @@ export function initAudio(customContext = null) {
   }
 }
 
-export function setMuted(muted) {
-  if (master) master.gain.value = muted ? 0 : MASTER_VOLUME;
-  if (music) music.gain.value = muted ? 0 : MUSIC_VOLUME;
+/**
+ * Put the volumes on the two buses.
+ *
+ * Mute stays a switch of its own rather than a volume of zero: the button in
+ * the top bar is a panic button, and it should not have to remember and put
+ * back the levels somebody chose in the settings.
+ *
+ * @param {boolean} [muted] silence both buses regardless of the saved setting —
+ *        how tools/audio-test.html renders with and without sound.
+ */
+export function setMuted(muted = settings.muted) {
+  if (master) master.gain.value = muted ? 0 : MASTER_VOLUME * settings.sfxVolume;
+  if (music) music.gain.value = muted ? 0 : MUSIC_VOLUME * settings.musicVolume;
 }
+
+/** The saved volumes, after the settings screen has changed one. */
+export const applyVolumes = () => setMuted();
 
 /** True once the context exists and sound would actually be heard. */
 export const audioReady = () => !!context && !settings.muted;

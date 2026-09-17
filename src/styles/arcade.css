@@ -198,6 +198,26 @@
   justify-content: center;
 }
 
+/*
+ * Starting a run, under everything that is not starting a run.
+ *
+ * The full width is the point: one thing on this screen is what the screen is
+ * for, and a button the width of the console cannot be mistaken for another
+ * item in the row of places to go.
+ */
+.start-launch {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /*
+   * About half as wide as the row of buttons above it, which measures a little
+   * under 700px. Wide enough that it is obviously the thing to press, and not
+   * so wide that it reads as a banner across the bottom of the screen.
+   */
+  width: min(340px, 100%);
+  margin: 0 auto;
+}
+
 .btn.big { font-size: 15px; padding: 16px 26px; }
 
 .start-foot {
@@ -637,5 +657,21 @@
   .invite-qr { max-width: 100%; }
   .start-cols { grid-template-columns: minmax(0, 1fr); }
   .start-actions .btn { flex: 1 1 140px; }
+  /* Down here the row above is the full width too, so this matches it. */
+  .start-launch { width: 100%; }
   .board { font-size: 16px; }
+
+  /*
+   * The corner links stop floating.
+   *
+   * Fixed to the bottom right, they sit over whatever scrolls underneath them,
+   * and on this width what scrolls underneath them is a full-width LOCK IN —
+   * three 34px link targets laid over the one button the screen exists for.
+   * There is no corner to spare here, so they go after the content instead.
+   */
+  .corner-links {
+    position: static;
+    align-self: flex-end;
+    margin-top: 2px;
+  }
 }

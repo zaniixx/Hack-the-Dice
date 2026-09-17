@@ -175,6 +175,7 @@
 <link data-css fetchpriority="high" rel="stylesheet" href="src/styles/cutscene.css" media="print">
 <link data-css fetchpriority="high" rel="stylesheet" href="src/styles/tutorial.css" media="print">
 <link data-css fetchpriority="high" rel="stylesheet" href="src/styles/mobile.css" media="print">
+<link data-css fetchpriority="high" rel="stylesheet" href="src/styles/settings.css" media="print">
 
 <!-- No script, no boot screen to switch the stylesheets on: load them the plain way. -->
 <noscript>
@@ -192,6 +193,7 @@
   <link rel="stylesheet" href="src/styles/cutscene.css">
   <link rel="stylesheet" href="src/styles/tutorial.css">
   <link rel="stylesheet" href="src/styles/mobile.css">
+  <link rel="stylesheet" href="src/styles/settings.css">
 </noscript>
 </head>
 <body>
@@ -232,7 +234,7 @@
   /** Roughly how much of the wait each stage is worth. They sum to 1. */
   var WEIGHT = [0.20, 0.08, 0.60, 0.12];
   /** What to assume about module count before this browser has ever seen it. */
-  var MODULE_GUESS = 78;
+  var MODULE_GUESS = 80;
   var SIZE_KEY = 'htd_boot_modules';
   /** A stylesheet that never answers must not strand the game behind it. */
   var CSS_TIMEOUT_MS = 8000;
@@ -391,9 +393,9 @@
       <button class="btn sm touch-only" id="btnRig" title="Black market and rig">RIG</button>
       <button class="btn sm touch-only" id="btnLog" title="Console log">LOG</button>
       <button class="btn sm touch-only" id="btnFull" title="Full screen">FULL</button>
-      <button class="btn sm" id="btnSpeed" title="Animation speed">SPD 1×</button>
-      <button class="btn sm" id="btnSound" title="Toggle sound">SND ON</button>
-      <button class="btn sm" id="btnMenu">MENU</button>
+      <button class="btn sm icon-only" id="btnSettings" title="Settings" aria-label="Settings">
+        <img id="settingsIcon" alt=""></button>
+      <button class="btn sm" id="btnHelp" title="How to hack">HELP</button>
     </div>
   </header>
 

@@ -5,8 +5,7 @@
  * game logic, so the input map can be read on its own and the game never
  * depends on how it was triggered.
  */
-import { cycleSpeed, toggleMuted } from '../core/settings.js';
-import { initAudio, setMuted } from '../audio/synth.js';
+import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
 import { toast } from './fx.js';
 import { dieAt } from '../engine/dice-board.js';
@@ -18,10 +17,10 @@ import { isModalOpen, hideModal } from './modal.js';
 import { isStartScreenOpen } from './start-screen.js';
 import { toggleSheet, closeSheet, openSheet, openSheetOf } from './sheets.js';
 import { openMarket, closeMarket, isMarketOpen } from './market.js';
+import { isSettingsOpen, openSettings } from './settings-panel.js';
 import { bindArtifactDrag, justDragged } from './artifact-drag.js';
 import { isCutsceneOpen } from './cutscene.js';
 import { isTouchLayout, toggleFullscreen, canFullscreen } from './viewport.js';
-import { syncSettingsButtons } from './hud.js';
 
 /** Clicking the board rolls, or locks the die under the pointer. */
 function bindBoard(actions) {
@@ -53,7 +52,7 @@ function bindButtons(actions) {
   els.rollButton.onclick = actions.roll;
   els.rerollButton.onclick = actions.reroll;
   els.executeButton.onclick = actions.execute;
-  els.menuButton.onclick = actions.openMenu;
+  els.helpButton.onclick = actions.openHelp;
   els.shopRefreshButton.onclick = actions.refreshShop;
 
   // Both breach buttons do the same thing: the one below the toolkit, and the
@@ -111,14 +110,11 @@ function bindButtons(actions) {
   els.artifactRow.style.touchAction = 'none'; // a drag must not scroll the page
   bindArtifactDrag(actions.reorderArtifacts);
 
-  els.speedButton.onclick = () => {
-    cycleSpeed();
-    syncSettingsButtons();
-  };
-  els.soundButton.onclick = () => {
+  // Speed and mute used to be two buttons in the bar. They are two rows in the
+  // settings screen now, and this is the way in to it.
+  els.settingsButton.onclick = () => {
     initAudio();
-    setMuted(toggleMuted());
-    syncSettingsButtons();
+    openSettings();
   };
 
   els.abilityBar.addEventListener('click', event => {
@@ -155,6 +151,12 @@ function bindKeyboard(actions) {
     // The start screen has its own keys, and text fields to type into; a
     // cutscene swallows everything until it is dismissed.
     if (isStartScreenOpen() || isCutsceneOpen()) return;
+    /*
+     * The settings pop-up is a dialog over the run. It takes Escape itself, and
+     * nothing else belongs to the board behind it — without this, Space rolls
+     * the dice while somebody is dragging the volume.
+     */
+    if (isSettingsOpen()) return;
     // Escape backs out of whatever is layered over the game, nearest first.
     if (event.code === 'Escape' && openSheetOf()) {
       closeSheet();
@@ -278,7 +280,7 @@ function bindDocument() {
  * Wire up every input.
  *
  * @param {object} actions roll, reroll, execute, useAbility, toggleLock,
- *                         buy, sell, refreshShop, nextNode, openMenu
+ *                         buy, sell, refreshShop, nextNode, openHelp
  */
 export function bindInput(actions) {
   watchForShell(); // first, so it sees a key before the game acts on it

@@ -59,8 +59,17 @@ button {
 #app {
   display:flex;
   flex-direction:column;
+  /*
+   * --app-height is the viewport as JS measured it, and it is the only height
+   * that survives the interface-size setting: viewport units are absolute, so
+   * a zoomed root multiplies 100dvh by the scale and the console ends up half a
+   * screen too tall or well short of the bottom. The units are the fallback for
+   * the moment before JS has run. styles/mobile.css has always done this — for
+   * the phone chrome reason — and this is the same fix for the same reason.
+   */
   height:100vh;
   height:100dvh;
+  height:var(--app-height, 100dvh);
   min-height:660px;
 }
 

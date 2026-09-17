@@ -48,6 +48,14 @@
   box-shadow:0 3px 0 #000;
 }
 .btn.wide { width:100%; }
+/* A button that is a sprite rather than a word — the settings gear. */
+.btn.icon-only {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:7px 9px;
+}
+.btn.icon-only img { width:15px; height:15px; image-rendering:pixelated; display:block; }
 .btn.pulse:not(:disabled) { animation:btnpulse 1s steps(2) infinite; }
 @keyframes btnpulse{50%{background:#1d1840}}
 

@@ -65,6 +65,11 @@ import {
 import { remoteStore } from '../src/services/remote-store.js';
 import * as ops from '../src/services/root-api.js';
 import { hasRemoteBoard, API_BASE } from '../src/services/config.js';
+import {
+  settings, saveSettings, setSetting, resetSettings, cycleSpeed, toggleMuted,
+  DEFAULTS, SPEEDS, SCALE_MIN, SCALE_MAX,
+} from '../src/core/settings.js';
+import { maxUiScale, uiScale, TOUCH_WIDTH } from '../src/ui/viewport.js';
 import { moodFor } from '../src/game/soundtrack.js';
 import { sfx } from '../src/audio/sfx.js';
 
@@ -585,6 +590,58 @@ try {
   check('and its format is written the same way',
     formatIn(urlQR, 1), FORMAT_L[urlQR.mask]);
   check('lower case and # force byte mode, so it is bigger', urlQR.size > sample.size, true);
+
+  /*
+   * Settings.
+   *
+   * The stored blob is the one piece of saved state a player can open a console
+   * and edit, so everything that reads it has to survive whatever is in there.
+   * These checks are about that rather than about the values themselves: a
+   * scale of 40 should be a setting that did not take, not a game that will not
+   * draw. The real ones are put back at the end, because this page shares
+   * storage with the game.
+   */
+  const savedSettings = { ...settings };
+
+  check('defaults are the ones the panel is written against',
+    [DEFAULTS.uiScale, DEFAULTS.theme, DEFAULTS.effects, DEFAULTS.shake], [1, 'system', true, true]);
+
+  check('a scale past the top is brought back to it', setSetting('uiScale', 40), SCALE_MAX);
+  check('and past the bottom, back up', setSetting('uiScale', 0.01), SCALE_MIN);
+  check('junk leaves the setting at its default',
+    setSetting('uiScale', 'enormous'), DEFAULTS.uiScale);
+  check('a volume cannot go negative', setSetting('sfxVolume', -3), 0);
+  check('or past full', setSetting('musicVolume', 9), 1);
+  check('a theme nobody has heard of is refused',
+    setSetting('theme', 'neon'), DEFAULTS.theme);
+  check('a theme we have is kept', setSetting('theme', 'dark'), 'dark');
+  check('a key that is not a setting is not invented',
+    [setSetting('godMode', true), 'godMode' in settings], [undefined, false]);
+
+  check('speed cycles through the speeds it offers',
+    [cycleSpeed(), cycleSpeed(), cycleSpeed()], [SPEEDS[1], SPEEDS[2], SPEEDS[0]]);
+  check('mute is a flip', [toggleMuted(), toggleMuted()], [true, false]);
+
+  resetSettings();
+  check('reset puts everything back', { ...settings }, { ...DEFAULTS });
+
+  /*
+   * How far the interface can be scaled is a property of the screen, not a
+   * preference: media queries cannot see the zoom the scale is made of, so past
+   * a point the desktop layout would keep three columns it no longer has room
+   * for. The exact ceiling depends on the window this is running in, so what is
+   * checked is that there is one and that nothing is ever applied above it.
+   */
+  check('the ceiling is a scale we could actually use',
+    maxUiScale() >= 1 && maxUiScale() <= SCALE_MAX, true);
+  setSetting('uiScale', SCALE_MAX);
+  check('and nothing is applied above it', uiScale() <= maxUiScale(), true);
+  check('a narrow desktop window is what lowers it',
+    innerWidth > TOUCH_WIDTH || maxUiScale() > 0, true);
+
+  Object.assign(settings, savedSettings);
+  saveSettings();
+  check('this suite left the real settings alone', { ...settings }, savedSettings);
 
   // The soundtrack follows tension, not location.
   check('the menu has its own mood', moodFor({ phase: 'title' }), 'menu');

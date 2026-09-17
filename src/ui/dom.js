@@ -42,12 +42,12 @@ export const els = {
   scrap: $('#tScrap'),
   seed: $('#tSeed'),
   best: $('#tBest'),
-  speedButton: $('#btnSpeed'),
   rigButton: $('#btnRig'),
   logButton: $('#btnLog'),
   fullscreenButton: $('#btnFull'),
-  soundButton: $('#btnSound'),
-  menuButton: $('#btnMenu'),
+  settingsButton: $('#btnSettings'),
+  settingsIcon: $('#settingsIcon'),
+  helpButton: $('#btnHelp'),
 
   // Target panel
   nodeName: $('#nodeName'),

@@ -1,0 +1,191 @@
+/* The settings pop-up, and the two settings that are themselves CSS. */
+
+.settings {
+  position: fixed;
+  inset: 0;
+  /* Over the start screen (70) and the cutscene (62): it opens from both. */
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(4, 3, 10, .82);
+}
+.settings[hidden] { display: none; }
+
+.set-box {
+  width: min(560px, 100%);
+  max-height: min(680px, 92dvh);
+  display: flex;
+  flex-direction: column;
+}
+
+.set-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--screen-line);
+  /* Above .screen::after, so the scanlines do not sit over the controls. */
+  position: relative;
+  z-index: 4;
+}
+.set-title {
+  flex: 1;
+  font-family: var(--px);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--cyan);
+}
+
+.set-body {
+  position: relative;
+  z-index: 4;
+  overflow-y: auto;
+  padding: 4px 12px 12px;
+}
+
+.set-sec {
+  margin: 14px 0 6px;
+  font-family: var(--px);
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--lime);
+}
+.set-sec:first-child { margin-top: 8px; }
+
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid rgba(36, 30, 66, .7);
+}
+.set-label {
+  flex: 1 1 42%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--px);
+  font-size: 8px;
+  letter-spacing: .5px;
+  color: var(--ink);
+}
+.set-label small {
+  font-family: var(--vt);
+  font-size: 15px;
+  letter-spacing: 0;
+  line-height: 1.15;
+  color: var(--dim);
+}
+
+.set-control {
+  flex: 1 1 58%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+/* The chosen answer in a row of them. */
+.set-control .btn.on {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--screen);
+}
+
+.set-value {
+  min-width: 46px;
+  text-align: right;
+  font-family: var(--vt);
+  font-size: 17px;
+  color: var(--lime);
+}
+
+/*
+ * The slider.
+ *
+ * Styled from scratch in both directions, because a native range control in the
+ * middle of a pixel-art console is the one thing on the screen that looks like
+ * a web page.
+ */
+.set-slider {
+  flex: 1 1 90px;
+  min-width: 70px;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.set-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  background: var(--screen-2);
+  border: 1px solid var(--screen-line);
+}
+.set-slider::-moz-range-track {
+  height: 6px;
+  background: var(--screen-2);
+  border: 1px solid var(--screen-line);
+}
+.set-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 16px;
+  margin-top: -6px;
+  background: var(--lime);
+  border: 1px solid var(--screen);
+}
+.set-slider::-moz-range-thumb {
+  width: 12px;
+  height: 16px;
+  border-radius: 0;
+  background: var(--lime);
+  border: 1px solid var(--screen);
+}
+.set-slider:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+
+.set-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--screen-line);
+}
+.set-note {
+  flex: 1;
+  text-align: right;
+  font-family: var(--vt);
+  font-size: 15px;
+  color: var(--dim);
+}
+
+/*
+ * SCREEN EFFECTS, off.
+ *
+ * The scanlines and the inner glow are drawn in four places, and on a dim phone
+ * screen or a low-end GPU they cost legibility and fill rate for decoration.
+ * This is the whole setting: there is nothing to turn off in JavaScript.
+ */
+:root[data-effects="off"] .screen::after,
+:root[data-effects="off"] .cutscene::after { display: none; }
+
+:root[data-effects="off"] .screen {
+  box-shadow: inset 0 0 0 2px var(--screen-line);
+}
+:root[data-effects="off"] .start-screen {
+  background: var(--screen);
+}
+
+@media (max-width: 560px) {
+  .set-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .set-control { justify-content: flex-start; }
+}

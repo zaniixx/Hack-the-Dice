@@ -270,7 +270,20 @@ export function updateUI() {
 }
 
 /** Reflect the current settings on the two top-bar toggles. */
+/**
+ * The settings button in the top bar.
+ *
+ * It replaced a SPD and a SND button that spelled their state out in the bar
+ * itself. One gear is quieter, but the state still has to be readable
+ * somewhere, so it goes in the tooltip rather than being lost.
+ */
 export function syncSettingsButtons() {
-  els.speedButton.textContent = `SPD ${settings.speed}×`;
-  els.soundButton.textContent = settings.muted ? 'SND OFF' : 'SND ON';
+  const { settingsButton, settingsIcon } = els;
+  if (!settingsButton) return;
+
+  if (settingsIcon) settingsIcon.src = iconURL('gear', settings.muted ? '#7e83ad' : '#3df2ff');
+
+  const label = `Settings — sound ${settings.muted ? 'off' : 'on'}, speed ${settings.speed}×`;
+  settingsButton.title = label;
+  settingsButton.setAttribute('aria-label', label);
 }

@@ -14,6 +14,7 @@ import { DICE } from '../data/dice.js';
 import { rand, randInt } from '../core/random.js';
 import { gameInt } from '../core/game-random.js';
 import { clamp } from '../core/math.js';
+import { settings } from '../core/settings.js';
 import { sfx } from '../audio/sfx.js';
 
 // ---- Tuning -----------------------------------------------------------------
@@ -242,7 +243,9 @@ export function stepParticles(dt) {
 
 function onLanding(die, strength) {
   spawnDust(die.x, die.y + 5, DICE[die.type].color, 2 + Math.round(strength * 6));
-  camera.shake = Math.max(camera.shake, strength * 2.2);
+  // Turned off by a player who finds it uncomfortable, or whose phone would
+  // rather not redraw the whole board twice as often.
+  if (settings.shake) camera.shake = Math.max(camera.shake, strength * 2.2);
   sfx.impact(strength);
 }
 

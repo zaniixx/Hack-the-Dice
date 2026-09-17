@@ -61,6 +61,12 @@
 .spacer { flex:1; }
 .topbtns {
   display:flex;
+  /*
+   * Wraps rather than clips. .topbar has always wrapped; this row had not, so
+   * when it ran out of room — a very narrow phone, or the interface scaled up —
+   * the last buttons simply went off the edge instead of onto a second line.
+   */
+  flex-wrap:wrap;
   gap:6px;
 }
 

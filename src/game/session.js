@@ -31,7 +31,7 @@ import { log, clearLog } from '../ui/log.js';
 import { fly, centerOf, bump, shakeApp, flashAlarm, clearAlarm } from '../ui/fx.js';
 import { updateUI, resetScoreboard, setEnemyOverlay } from '../ui/hud.js';
 import { hideModal } from '../ui/modal.js';
-import { showMenuScreen, showMigrationScreen, showTracedScreen } from '../ui/screens.js';
+import { showHelpScreen, showMigrationScreen, showTracedScreen } from '../ui/screens.js';
 import { openStartScreen, rememberResult } from '../ui/start-screen.js';
 import { maybeStartTutorial, startTutorial } from '../ui/tutorial.js';
 import { showBossCutscene } from '../ui/cutscene.js';
@@ -382,10 +382,10 @@ export function showTitle(view, tournamentId = null) {
   });
 }
 
-/** The in-game menu: the rules, a replay of the tutorial, and a way out. */
-export function openMenu() {
+/** Help, mid-run: the rules, a replay of the tutorial, and a way out. */
+export function openHelp() {
   const busy = isBusy();
-  showMenuScreen({
+  showHelpScreen({
     busy,
     canRestart: !busy && run.phase !== Phase.TITLE,
     onRestart: abandonRun,

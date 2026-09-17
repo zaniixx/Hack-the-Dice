@@ -13,7 +13,7 @@ import { dice } from '../engine/dice-board.js';
 import { store } from '../services/store.js';
 import { run, Phase } from '../game/state.js';
 import { els } from './dom.js';
-import { isTouchLayout } from './viewport.js';
+import { isTouchLayout, uiScale } from './viewport.js';
 
 /**
  * A step points at something, appears when it is relevant, and finishes when
@@ -90,9 +90,39 @@ function keepClear() {
     els.artifactRow, els.bits.closest('.scorebar'),
   ]
     .filter(Boolean)
-    .map(el => el.getBoundingClientRect())
+    .map(boxOf)
     .filter(box => box.width && box.height);
 }
+
+/**
+ * Where something is, in the units this overlay is positioned in.
+ *
+ * getBoundingClientRect answers in real screen pixels. The coach is laid out
+ * inside the root, and the interface-size setting zooms the root — so at 130% a
+ * CSS pixel here is worth 1.3 screen pixels, and a ring placed at the raw
+ * numbers lands further from the thing it is ringing the further the interface
+ * is scaled from 100%. Everything measured from the page has to come back
+ * through here before it is written into a style.
+ */
+function boxOf(el) {
+  const rect = el.getBoundingClientRect();
+  const scale = uiScale() || 1;
+  if (scale === 1) return rect;
+  return {
+    left: rect.left / scale,
+    top: rect.top / scale,
+    right: rect.right / scale,
+    bottom: rect.bottom / scale,
+    width: rect.width / scale,
+    height: rect.height / scale,
+  };
+}
+
+/** The viewport, in those same units. */
+const viewport = () => {
+  const scale = uiScale() || 1;
+  return { width: innerWidth / scale, height: innerHeight / scale };
+};
 
 /** Put the ring around the target and the note somewhere it fits. */
 function place(step) {
@@ -102,11 +132,12 @@ function place(step) {
     return;
   }
 
-  const box = target.getBoundingClientRect();
+  const box = boxOf(target);
   if (!box.width || !box.height) {
     hide();
     return;
   }
+  const view = viewport();
 
   const pad = 8;
   const ring = els.coachRing;
@@ -123,7 +154,7 @@ function place(step) {
 
   if (isTouchLayout()) {
     // On a phone there is nowhere to tuck a note: pin it out of the way.
-    const nearTop = box.top < innerHeight / 2;
+    const nearTop = box.top < view.height / 2;
     note.style.left = '12px';
     note.style.right = '12px';
     if (nearTop) note.style.bottom = '16px';
@@ -137,8 +168,8 @@ function place(step) {
 
   const gap = 18;
   const clamp = (value, max) => Math.min(Math.max(12, value), Math.max(12, max));
-  const centredLeft = clamp(box.left + box.width / 2 - width / 2, innerWidth - width - 12);
-  const centredTop = clamp(box.top + box.height / 2 - height / 2, innerHeight - height - 12);
+  const centredLeft = clamp(box.left + box.width / 2 - width / 2, view.width - width - 12);
+  const centredTop = clamp(box.top + box.height / 2 - height / 2, view.height - height - 12);
 
   // Below, above, right, left — in the order they usually read best.
   const candidates = [
@@ -155,7 +186,7 @@ function place(step) {
   for (const spot of candidates) {
     // A candidate that falls off screen is no candidate at all.
     if (spot.left < 12 || spot.top < 12) continue;
-    if (spot.left + width > innerWidth - 12 || spot.top + height > innerHeight - 12) continue;
+    if (spot.left + width > view.width - 12 || spot.top + height > view.height - 12) continue;
 
     const rect = { left: spot.left, top: spot.top,
       right: spot.left + width, bottom: spot.top + height };
@@ -165,7 +196,7 @@ function place(step) {
   }
 
   // Everything overlaps something on a small window: take the least bad corner.
-  const spot = best || { left: centredLeft, top: clamp(box.bottom + gap, innerHeight - height - 12) };
+  const spot = best || { left: centredLeft, top: clamp(box.bottom + gap, view.height - height - 12) };
   note.style.left = `${spot.left}px`;
   note.style.top = `${spot.top}px`;
 }

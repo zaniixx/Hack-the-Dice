@@ -15,13 +15,14 @@ import { initBoardView, syncBoardSize, drawBoard } from './render/board-view.js'
 import { initEnemyView, resetEnemyView, markEnemyDestroyed, drawEnemy } from './render/enemy-view.js';
 import { els } from './ui/dom.js';
 import { trackViewportHeight, blockZoomGestures } from './ui/viewport.js';
+import { applySettings } from './ui/appearance.js';
 import { updateUI, syncSettingsButtons } from './ui/hud.js';
 import { bindInput } from './ui/input.js';
 import { run, Phase, createRun } from './game/state.js';
 import { rollDice, rerollDice, onDiceSettled, useAbility, toggleLock } from './game/turn.js';
 import { executePayload } from './game/execute.js';
 import { buyItem, sellItem, refreshShop, reorderArtifacts } from './game/shop.js';
-import { beginNode, breachNode, showTitle, openMenu } from './game/session.js';
+import { beginNode, breachNode, showTitle, openHelp } from './game/session.js';
 import { tickMemoryLeak } from './game/memory-leak.js';
 import { allowedDice, isAbsorbed } from './game/scoring.js';
 import { stopLiveRun } from './game/live-run.js';
@@ -124,9 +125,19 @@ function onContainerResize() {
 async function start() {
   await window.__htdBoot?.styles;
 
-  // Before anything measures itself: the layout depends on --app-height.
+  /*
+   * Before anything measures itself. The interface-size setting zooms the root,
+   * which changes what a CSS pixel is worth, so it has to be on the page before
+   * --app-height is calculated and before the board canvas sizes itself from
+   * its container.
+   */
+  applySettings();
   trackViewportHeight();
   blockZoomGestures();
+
+  // How far the interface can be scaled depends on how much screen there is,
+  // so a window being dragged smaller has to be able to take some of it back.
+  addEventListener('resize', applySettings);
 
   syncSettingsButtons();
   createRun();
@@ -152,7 +163,7 @@ async function start() {
     refreshShop,
     reorderArtifacts,
     nextNode: beginNode,
-    openMenu,
+    openHelp,
   });
 
   // Leaving mid-run takes the runner out of the lobby straight away, rather
