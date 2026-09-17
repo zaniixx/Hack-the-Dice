@@ -78,7 +78,8 @@ const state = await import('../src/game/state.js');
 const { startNewRun, beginNode, resumeRun } = await import('../src/game/session.js');
 const { rollDice, rerollDice, onDiceSettled, refreshPreview, useAbility } = await import('../src/game/turn.js');
 const { executePayload } = await import('../src/game/execute.js');
-const { buyItem, sellItem, refreshShop, generateShop } = await import('../src/game/shop.js');
+const { buyItem, sellItem, refreshShop, generateShop, reorderArtifacts } = await import('../src/game/shop.js');
+const { isDraggingArtifacts, justDragged } = await import('../src/ui/artifact-drag.js');
 const { loadSavedRun, saveRun } = await import('../src/game/save.js');
 const { isLeakDraining, tickMemoryLeak } = await import('../src/game/memory-leak.js');
 const board = await import('../src/engine/dice-board.js'); // `dice` is a live binding too
@@ -421,6 +422,98 @@ try {
   check('sold an artifact', state.run.artifacts.length, 4);
   sellItem('abil', 0);
   check('sold an ability', state.run.abilities.length, 2);
+
+  section('It reads as a game, not a page');
+  state.run.artifacts = ['quantum', 'botnet', 'brute'];
+  updateUI();
+  const styleOf = (el, prop) => getComputedStyle(el).getPropertyValue(prop).trim();
+
+  for (const [what, el] of [
+    ['the artifact row', els.artifactRow],
+    ['a slot', els.artifactRow.querySelector('.art[data-id]')],
+    ['the console log', els.log],
+    ['the scoreboard', els.bits],
+    ['the toolkit', els.toolkit],
+  ]) check(what + ' cannot be selected', styleOf(el, 'user-select'), 'none');
+
+  check('sprites cannot be dragged off the page',
+    styleOf(els.artifactRow.querySelector('.art img'), '-webkit-user-drag'), 'none');
+  check('and neither can the board', styleOf(els.boardCanvas, '-webkit-user-drag'), 'none');
+  check('taps do not flash',
+    styleOf(document.documentElement, '-webkit-tap-highlight-color'), 'rgba(0, 0, 0, 0)');
+
+  // A native drag is refused outright, which is what Firefox needs.
+  const refusesDrag = el => {
+    const event = new Event('dragstart', { bubbles: true, cancelable: true });
+    el.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  check('an image will not start a drag',
+    refusesDrag(els.artifactRow.querySelector('.art img')), true);
+
+  section('Artifact order');
+  startNewRun({ handle: 'ANON', difficulty: 'pen-tester', seed: 'ORDER-1' });
+
+  // BOTNET is +1 Mult per die, QUANTUM CORE is x2. Five d6 showing 4 = 20 bits.
+  async function damageWith(order) {
+    state.run.artifacts = [...order];
+    state.run.editions = {};
+    state.run.dice = ['d6', 'd6', 'd6', 'd6', 'd6'];
+    board.setDicePool(state.run.dice);
+    state.run.enemy.hp = state.run.enemy.max = 1e9;
+    state.run.executes = state.run.maxExecutes = 9;
+    state.run.phase = 'ready';
+    rollDice();
+    settle();
+    setFaces([4]);
+    const before = state.run.stats.dmg;
+    await executePayload();
+    return state.run.stats.dmg - before;
+  }
+
+  // Each slot finishes before the next starts, so +Mult only gets multiplied
+  // by the xMult sitting to its right.
+  check('flat before times pays 20 x (1+5) x2', await damageWith(['botnet', 'quantum']), 240);
+  check('times before flat pays 20 x ((1x2)+5)', await damageWith(['quantum', 'botnet']), 140);
+  check('a third artifact follows the same rule',
+    await damageWith(['brute', 'botnet', 'quantum']), 45 * 6 * 2);
+
+  state.run.artifacts = ['quantum', 'botnet'];
+  reorderArtifacts(['botnet', 'quantum']);
+  check('reordering applies', state.run.artifacts, ['botnet', 'quantum']);
+  reorderArtifacts(['botnet']);
+  check('a partial order keeps what it did not mention',
+    state.run.artifacts, ['botnet', 'quantum']);
+  reorderArtifacts(['ghost', 'quantum', 'botnet']);
+  check('and an order naming what is not installed is ignored',
+    state.run.artifacts, ['quantum', 'botnet']);
+
+  // Dragging the row is how a player does it.
+  state.run.artifacts = ['quantum', 'botnet', 'brute'];
+  updateUI();
+  const slotIds = () => [...els.artifactRow.querySelectorAll('.art[data-id]')].map(el => el.dataset.id);
+  const pointer = (type, x, y) => new PointerEvent(type,
+    { clientX: x, clientY: y, bubbles: true, pointerId: 1, button: 0, isPrimary: true });
+  const slotBox = i => els.artifactRow.querySelectorAll('.art')[i].getBoundingClientRect();
+
+  getSelection().removeAllRanges();
+  const first = slotBox(0);
+  const last = slotBox(2);
+  const alongY = first.top + first.height / 2;
+  els.artifactRow.querySelector('.art[data-id]')
+    .dispatchEvent(pointer('pointerdown', first.left + first.width / 2, alongY));
+  els.artifactRow.dispatchEvent(pointer('pointermove', first.left + first.width / 2 + 3, alongY + 1));
+  check('a press that barely moves stays a tap', isDraggingArtifacts(), false);
+
+  els.artifactRow.dispatchEvent(pointer('pointermove', last.left + last.width - 2, alongY));
+  check('a real move becomes a drag', isDraggingArtifacts(), true);
+  check('and the row reorders under the pointer', slotIds(), ['botnet', 'brute', 'quantum']);
+
+  els.artifactRow.dispatchEvent(pointer('pointerup', last.left + last.width - 2, alongY));
+  check('dropping it reorders the rig', state.run.artifacts, ['botnet', 'brute', 'quantum']);
+  check('and the drag highlighted nothing', getSelection().toString(), '');
+  check('the drop is not also a tap', justDragged(), true);
+  check('and a repaint keeps the order', (updateUI(), slotIds()), ['botnet', 'brute', 'quantum']);
 
   section('The archive');
   archive.forgetAll();

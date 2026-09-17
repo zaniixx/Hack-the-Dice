@@ -1,16 +1,20 @@
 /**
- * The author's links, shown on the start screen.
+ * Links shown at the foot of the start screen.
  *
- * Fill in the three URLs below and the row appears; leave one blank and that
- * link is simply left out, so the screen never shows a dead link. This is the
- * only file that needs editing.
+ * Two rows with different jobs: who made it, and where the code lives. Leave a
+ * url blank and that link is simply left out, so the screen never shows a dead
+ * one — which is why the two that are not filled in below cost nothing.
+ *
+ * This is the only file that needs editing to change any of them.
  */
+
+/** Where to find the author. */
 export const SOCIAL_LINKS = [
   {
     id: 'github',
     label: 'GITHUB',
     color: '#b6ff3d',
-    url: '', // e.g. 'https://github.com/yourname'
+    url: 'https://github.com/zaniixx',
   },
   {
     id: 'linkedin',
@@ -26,5 +30,32 @@ export const SOCIAL_LINKS = [
   },
 ];
 
+/** The repository this game is served from. */
+export const REPO_URL = 'https://github.com/zaniixx/Hack-the-Dice';
+
+/**
+ * Where to send someone who has found something wrong.
+ *
+ * A bug report is worth more than a shrug, so it gets a button of its own
+ * rather than being buried behind the source link.
+ */
+export const PROJECT_LINKS = [
+  {
+    id: 'github',
+    label: 'SOURCE',
+    color: '#c9d1ff',
+    url: REPO_URL,
+  },
+  {
+    id: 'bug',
+    label: 'REPORT A BUG',
+    color: '#ff4d6d',
+    url: REPO_URL ? REPO_URL + '/issues/new' : '',
+  },
+];
+
 /** Only the links that have somewhere to go. */
-export const activeLinks = () => SOCIAL_LINKS.filter(link => link.url.trim());
+const withSomewhereToGo = links => links.filter(link => link.url.trim());
+
+export const activeLinks = () => withSomewhereToGo(SOCIAL_LINKS);
+export const activeProjectLinks = () => withSomewhereToGo(PROJECT_LINKS);

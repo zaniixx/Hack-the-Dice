@@ -185,6 +185,31 @@ export function sellItem(kind, index) {
   updateUI();
 }
 
+/**
+ * Put the artifact row in a new order.
+ *
+ * Order is worth real damage — each slot pays out in full before the next, so
+ * ×Mult artifacts want to sit to the right of the +Mult ones — so this is a
+ * move the player makes, and it is saved like any other change to the rig.
+ *
+ * Anything the row does not mention is left where it was, which keeps a stale
+ * or partial order from quietly dropping an artifact.
+ *
+ * @param {string[]} order artifact ids, left to right
+ */
+export function reorderArtifacts(order) {
+  if (!run || !Array.isArray(order)) return;
+
+  const moved = order.filter(id => run.artifacts.includes(id));
+  const rest = run.artifacts.filter(id => !moved.includes(id));
+  const next = [...moved, ...rest];
+  if (next.join() === run.artifacts.join()) return;
+
+  run.artifacts = next;
+  saveRun();
+  updateUI();
+}
+
 /** Pay to re-roll the offers. Each refresh this visit costs one more. */
 export function refreshShop() {
   if (run.phase !== Phase.SHOP) return;

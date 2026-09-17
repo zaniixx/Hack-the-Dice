@@ -12,7 +12,8 @@
 import { fmt } from '../core/format.js';
 import { DEFAULT_DIFFICULTY, isKnownDifficulty } from '../data/difficulty.js';
 import { MAX_SEED_LENGTH, normaliseSeed } from '../core/game-random.js';
-import { activeLinks } from '../data/links.js';
+import { activeLinks, activeProjectLinks } from '../data/links.js';
+import { COPYRIGHT } from '../data/legal.js';
 import { iconURL } from '../render/icon-sprites.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
@@ -80,18 +81,23 @@ const root = () => els.start;
 // ---- Views ------------------------------------------------------------------
 
 /**
- * The author's links, or nothing at all.
+ * Where the code is, how to report something broken, and who made it — in the
+ * corner, where none of that competes with the game.
+ *
+ * Icon only: a row of labelled buttons across the middle of the screen read as
+ * though pressing them were part of starting a run. The name appears beside the
+ * icon on hover, and `aria-label` carries it for anyone not hovering anything.
  *
  * These leave the game, so they open in a new tab and drop the referrer.
  */
-function socialsHTML() {
-  const links = activeLinks();
+function cornerLinksHTML() {
+  const links = [...activeLinks(), ...activeProjectLinks()];
   if (!links.length) return '';
 
-  return `<div class="socials">${links.map(link => `
-    <a class="social" href="${link.url}" target="_blank" rel="noopener noreferrer"
-       style="--tier:${link.color}">
-      <img src="${iconURL(link.id, link.color)}" alt=""><span>${link.label}</span>
+  return `<div class="corner-links">${links.map(link => `
+    <a class="corner-link" href="${link.url}" target="_blank" rel="noopener noreferrer"
+       style="--tier:${link.color}" data-label="${link.label}" aria-label="${link.label}">
+      <img src="${iconURL(link.id, link.color)}" alt="">
     </a>`).join('')}</div>`;
 }
 
@@ -149,9 +155,8 @@ function homeHTML() {
       <button class="btn sm" data-action="view:how">HOW TO HACK</button>
     </div>
 
-    ${socialsHTML()}
-
     <p class="start-foot">${footNote()}</p>
+    <p class="start-legal">${COPYRIGHT}</p>
   </div>`;
 }
 
@@ -296,7 +301,7 @@ async function render() {
   const html = await VIEWS[view]();
   if (token !== renderToken) return; // superseded while we were loading
 
-  root().innerHTML = html;
+  root().innerHTML = html + cornerLinksHTML();
   root().scrollTop = 0;
 
   if (view === 'tournament') watchLobby();

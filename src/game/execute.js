@@ -9,11 +9,16 @@
  *   2. artifacts with a perDie hook fire alongside each die
  *   2b. a die that scores twice (CHRONO) goes round again
  *   3. RECURSIVE LOOP retriggers the best die
- *   4. artifacts add flat bonuses, then so do their editions
- *   5. dice that carry a late ×Mult (AMP, QUBIT) resolve
- *   6. artifacts apply ×Mult, then so do their editions
- *   7. OVERDRIVE, then the boss's cipher shield
- *   8. Bits × Mult lands on the firewall
+ *   4. every artifact pays out in full, one slot at a time, left to right
+ *   5. dice that carry a late ×Mult (AMP, QUBIT, NOVA) resolve
+ *   6. OVERDRIVE, then the boss's cipher shield
+ *   7. Bits × Mult lands on the firewall
+ *
+ * Step 4 is why the order of the artifact row is a decision and not decoration.
+ * A slot resolves completely before the next one starts, so a +Mult artifact is
+ * only multiplied by the ×Mult artifacts sitting to its right. Putting the flat
+ * ones first and the multiplying ones last is the best a rig can do; any other
+ * arrangement pays less. Players drag them into order — see ui/artifact-drag.js.
  *
  * Nothing here touches the DOM: ui/execute-view.js does the showing.
  */
@@ -106,31 +111,28 @@ async function scoreDie(die, tally, index) {
   await sleep(delay * 0.6);
 }
 
-/** Run one artifact hook across every installed artifact, in slot order. */
-async function runArtifactPhase(tally, hook, pause) {
+/**
+ * Every artifact pays out, one slot at a time, left to right.
+ *
+ * A slot hands over everything it has before the next slot starts: its flat
+ * Bits and Mult, its edition's flat rider, then its ×Mult and its edition's.
+ * Keeping plus-before-times *within* a slot is what makes a single artifact
+ * behave the obvious way; the ordering that matters is between slots, and that
+ * is the player's to arrange.
+ */
+async function runArtifactSlots(tally, pause) {
   for (const id of run.artifacts) {
     const artifact = ARTIFACTS[id];
-    if (!artifact[hook]) continue;
-    for (const effect of artifact[hook](tally)) {
-      executeView.pulseArtifact(id);
-      applyEffect(tally, effect, Source.artifact(id));
-      await sleep(pause);
-    }
-  }
-}
-
-/**
- * The same, for editions.
- *
- * A stamp pays out of the slot it is stamped on, in the same phase order as the
- * artifacts themselves, so a PRISMATIC rider lands after every flat bonus is in
- * and multiplies the lot.
- */
-async function runEditionPhase(tally, hook, pause) {
-  for (const id of run.artifacts) {
     const edition = EDITIONS[run.editions[id]];
-    if (!edition || !edition[hook]) continue;
-    for (const effect of edition[hook](tally)) {
+
+    const effects = [
+      ...(artifact.bonus?.(tally) || []),
+      ...(edition?.flat?.(tally) || []),
+      ...(artifact.multiplier?.(tally) || []),
+      ...(edition?.late?.(tally) || []),
+    ];
+
+    for (const effect of effects) {
       executeView.pulseArtifact(id);
       applyEffect(tally, effect, Source.artifact(id));
       await sleep(pause);
@@ -251,17 +253,16 @@ async function resolveExecute() {
   log(`> execute ${run.maxExecutes - run.executes + 1}: injecting payload`, 'white');
 
   await scoreBoard(tally, enemy);
-  await runArtifactPhase(tally, 'bonus', 230);
-  await runEditionPhase(tally, 'flat', 230);
+  await runArtifactSlots(tally, 245);
 
+  // The dice have the last word on ×Mult, after the rig has finished: it keeps
+  // AMP, QUBIT and NOVA multiplying the whole payload however the row is
+  // arranged, so a good arrangement is worth exactly what it always was.
   for (const late of tally.lateMultipliers) {
     late.die.flash = 1;
     applyEffect(tally, xMult(late.value), Source.die(late.die));
     await sleep(230);
   }
-
-  await runArtifactPhase(tally, 'multiplier', 260);
-  await runEditionPhase(tally, 'late', 260);
 
   if (run.overdrive > 1) {
     const label = `${run.overdriveLabel} ×${fmtM(run.overdrive)}`;

@@ -21,14 +21,9 @@
     overflow: hidden;
     /* No pull-to-refresh, no rubber-band at the edges. */
     overscroll-behavior: none;
-    /* No double-tap zoom; taps stay instant. */
+    /* No double-tap zoom; taps stay instant. Selection, the callout and the
+       tap highlight are off for every layout — see base.css. */
     touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  body {
-    user-select: none;
-    -webkit-user-select: none;
   }
 
   /*
@@ -101,11 +96,8 @@
 
   .board-wrap { flex: 1 1 0; height: auto; min-height: 140px; }
 
-  /* The board owns every touch that lands on it: no scroll, no callout. */
-  #board {
-    touch-action: none;
-    -webkit-touch-callout: none;
-  }
+  /* The board owns every touch that lands on it: no scrolling it away. */
+  #board { touch-action: none; }
   .hint { font-size: 15px; bottom: 4px; }
   .combo { font-size: 7px; }
 

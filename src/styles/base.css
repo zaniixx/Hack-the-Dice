@@ -1,6 +1,32 @@
 /* Element defaults and the app shell. */
 
 * { box-sizing:border-box; }
+
+/*
+ * A game, not a document.
+ *
+ * Dragging a die or an artifact used to paint a selection across half the
+ * console, a double-click picked out whatever word was under it, and sprites
+ * could be dragged off the page as images. None of that belongs in something
+ * being played, so selection is off everywhere and switched back on only where
+ * there is genuinely text: the fields you type into, and the codes a host reads
+ * out or pastes somewhere else.
+ */
+html {
+  user-select:none;
+  -webkit-user-select:none;
+  /* No long-press "copy image" sheet, and no blue flash on every tap. */
+  -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
+}
+input,textarea,[contenteditable],.op-code,.selectable {
+  user-select:text;
+  -webkit-user-select:text;
+  -webkit-touch-callout:default;
+}
+/* Sprites are painted, not pictures to drag into another window. */
+img,canvas { -webkit-user-drag:none; }
+
 html,body {
   margin:0;
   height:100%;

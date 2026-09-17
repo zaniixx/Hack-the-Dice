@@ -87,6 +87,7 @@ const { els } = await import('../src/ui/dom.js');
 const { updateUI } = await import('../src/ui/hud.js');
 const { startTutorial } = await import('../src/ui/tutorial.js');
 const { bossForServer, bossOrderFor } = await import('../src/data/bosses.js');
+const { COPYRIGHT, COPYRIGHT_HOLDER, COPYRIGHT_YEAR } = await import('../src/data/legal.js');
 
 /** Screen actions are async; give each click a frame to settle. */
 const tick = () => new Promise(resolve => setTimeout(resolve, 60));
@@ -118,6 +119,41 @@ try {
   check('tier selection sticks',
     els.start.querySelector('.tier-card.on .tier-name').textContent, 'NATION STATE');
   check('handle survives the re-render', els.start.querySelector('#handleInput').value, 'NEO');
+
+  section('Links, and who owns this');
+  const linkButtons = [...els.start.querySelectorAll('.corner-link')];
+  check('the start screen offers links', linkButtons.length > 0, true);
+  check('including the author and a way to report a bug',
+    linkButtons.map(a => a.dataset.label), ['GITHUB', 'SOURCE', 'REPORT A BUG']);
+  check('the bug button opens an issue',
+    linkButtons.at(-1).getAttribute('href').endsWith('/issues/new'), true);
+  check('every link leaves the game safely',
+    linkButtons.every(a => a.target === '_blank'
+      && a.rel.includes('noopener') && a.rel.includes('noreferrer')), true);
+  check('they are icons, with no label taking up room',
+    linkButtons.every(a => a.querySelector('img') && !a.textContent.trim()), true);
+  // No visible text means the name has to reach a screen reader another way.
+  check('and each still says what it is',
+    linkButtons.every(a => a.getAttribute('aria-label')), true);
+  check('they sit in the corner, out of the way',
+    getComputedStyle(els.start.querySelector('.corner-links')).position, 'fixed');
+  // Appended beside the view rather than inside it, which is what keeps it on
+  // the leaderboard and the tournament screens too, not just this one.
+  check('and belong to the screen, not to one view of it',
+    els.start.querySelector('.corner-links').parentElement, els.start);
+
+  const legalLine = els.start.querySelector('.start-legal');
+  check('the copyright is on the screen', legalLine?.textContent.trim(), COPYRIGHT);
+  check('and it reserves the rights', COPYRIGHT.includes('All rights reserved'), true);
+
+  const licenceText = await (await fetch('../LICENSE')).text();
+  check('a LICENSE file ships with it',
+    licenceText.includes('All rights reserved'), true);
+  check('naming the same holder as the screen',
+    licenceText.includes(COPYRIGHT_HOLDER), true);
+  check('and the same year',
+    licenceText.includes(String(COPYRIGHT_YEAR)), true);
+
 
   section('Threat level applies to the run');
   await click('[data-action="start"]');

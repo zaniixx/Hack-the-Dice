@@ -23,6 +23,7 @@ import { isEnemyDestroyed, hasEnemyDebris } from '../render/enemy-view.js';
 import { run, Phase } from '../game/state.js';
 import { loadBest } from '../game/save.js';
 import { artifactSlots } from '../game/difficulty.js';
+import { isDraggingArtifacts } from './artifact-drag.js';
 import { renderShop } from './shop-view.js';
 import { renderInventory } from './inventory-view.js';
 import { els } from './dom.js';
@@ -103,6 +104,10 @@ export function updateFirewall({ draining = false } = {}) {
 }
 
 function renderArtifactRow() {
+  // Mid-drag the row belongs to the player: repainting it would yank the slot
+  // out from under the pointer. Whatever changed will be drawn when they let go.
+  if (isDraggingArtifacts()) return;
+
   // The row is exactly as wide as the rig: a NEGATIVE edition adds a column.
   const slots = artifactSlots();
   els.artifactRow.style.setProperty('--slots', slots);
@@ -119,7 +124,11 @@ function renderArtifactRow() {
     const stack = def.stack ? `<em>${def.stack(run)}</em>` : '';
     const stamp = edition ? `<i class="ed">${edition.tag}</i>` : '';
     const title = `${def.name}: ${def.desc}`
-      + (edition ? ` — ${edition.name}: ${edition.desc}` : '');
+      + (edition ? ` — ${edition.name}: ${edition.desc}` : '')
+      + `
+
+Slot ${i + 1} of ${slots}. Drag to reorder — slots pay out left to`
+      + ' right, so +Mult belongs left of ×Mult.';
     html += `<div class="art${edition ? ' stamped' : ''}" data-id="${id}" title="${title}"
                   style="--ed:${edition ? edition.color : 'transparent'}">
       <img src="${iconURL(id, def.color)}" alt=""><span>${def.name}</span>${stack}${stamp}

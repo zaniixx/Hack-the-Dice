@@ -71,6 +71,20 @@
   cursor:default;
 }
 .art.fire { animation:fire .38s steps(4); }
+
+/* Ordering the row is a move, so a filled slot reads as something you can pick
+   up — and the one in hand reads as lifted out of the row. */
+.art[data-id] { cursor:grab; }
+.arts.reordering .art[data-id] { cursor:grabbing; }
+.arts.reordering { cursor:grabbing; }
+.art.dragging {
+  opacity:.85;
+  border-color:var(--lime);
+  box-shadow:inset 0 0 0 1px var(--lime),0 0 14px -2px var(--lime);
+  transform:translateY(-3px) scale(1.06);
+}
+/* The slots part around it rather than snapping, so the move is legible. */
+.arts.reordering .art:not(.dragging) { transition:transform .12s steps(2); }
 @keyframes fire{0%{transform:none}35%{transform:translateY(-7px) scale(1.14);box-shadow:0 0 0 2px var(--amber),0 0 18px var(--amber)}100%{transform:none}}
 .board-wrap {
   flex:1 1 0;

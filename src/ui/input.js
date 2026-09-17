@@ -18,6 +18,7 @@ import { isModalOpen, hideModal } from './modal.js';
 import { isStartScreenOpen } from './start-screen.js';
 import { toggleSheet, closeSheet, openSheet, openSheetOf } from './sheets.js';
 import { openMarket, closeMarket, isMarketOpen } from './market.js';
+import { bindArtifactDrag, justDragged } from './artifact-drag.js';
 import { isCutsceneOpen } from './cutscene.js';
 import { isTouchLayout, toggleFullscreen, canFullscreen } from './viewport.js';
 import { syncSettingsButtons } from './hud.js';
@@ -101,9 +102,14 @@ function bindButtons(actions) {
   if (!canFullscreen()) els.fullscreenButton.hidden = true;
 
   // Artifact slots are icon-only on a phone; tapping the row shows them named.
+  // Dragging one into a new slot also ends in a click, which is not a tap.
   els.artifactRow.onclick = () => {
+    if (justDragged()) return;
     if (isTouchLayout()) openSheet('rig');
   };
+
+  els.artifactRow.style.touchAction = 'none'; // a drag must not scroll the page
+  bindArtifactDrag(actions.reorderArtifacts);
 
   els.speedButton.onclick = () => {
     cycleSpeed();
@@ -253,6 +259,16 @@ function bindDocument() {
   // Keep buttons from taking focus on click: the focus ring is for keyboard use.
   document.addEventListener('mousedown', event => {
     if (event.target.closest('button')) event.preventDefault();
+  });
+
+  /*
+   * Nothing here is a file to drag onto the desktop or text to drag into
+   * another window. CSS stops the selection that native dragging needs, but
+   * -webkit-user-drag is WebKit's alone, so images still lift away in Firefox
+   * without this. A field the player is typing in keeps its own behaviour.
+   */
+  document.addEventListener('dragstart', event => {
+    if (!event.target.closest?.('input, textarea, [contenteditable]')) event.preventDefault();
   });
   // Browsers only allow audio to start inside a user gesture.
   document.addEventListener('pointerdown', () => initAudio(), { once: true });

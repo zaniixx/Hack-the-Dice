@@ -20,7 +20,7 @@ import { bindInput } from './ui/input.js';
 import { run, Phase, createRun } from './game/state.js';
 import { rollDice, rerollDice, onDiceSettled, useAbility, toggleLock } from './game/turn.js';
 import { executePayload } from './game/execute.js';
-import { buyItem, sellItem, refreshShop } from './game/shop.js';
+import { buyItem, sellItem, refreshShop, reorderArtifacts } from './game/shop.js';
 import { beginNode, breachNode, showTitle, openMenu } from './game/session.js';
 import { tickMemoryLeak } from './game/memory-leak.js';
 import { allowedDice, isAbsorbed } from './game/scoring.js';
@@ -138,6 +138,7 @@ function start() {
     buy: buyItem,
     sell: sellItem,
     refreshShop,
+    reorderArtifacts,
     nextNode: beginNode,
     openMenu,
   });

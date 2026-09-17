@@ -64,6 +64,18 @@ unchanged as an on-ramp; by server 6 a good build is spending three of its four
 executes on a boss instead of one, and the numbers on screen are in the
 billions by the time a run ends.
 
+**The artifact row is a decision, not a list.** Cyberartifacts pay out left to
+right, and each slot finishes before the next one starts — so a +Mult artifact
+is only multiplied by the ×Mult artifacts sitting to its right. Put BOTNET
+before QUANTUM CORE and five dice scoring 4 deal 240; swap them and the same
+rig deals 140. Drag the slots to arrange them, on a phone as well as a desktop.
+
+Flat first and multiplying last is the best a rig can do, and that is exactly
+what the pipeline used to do on the player's behalf — so a well-ordered row is
+worth what it always was, and the new decision is one you can get wrong rather
+than a new source of power. An edition rides on its own slot, which makes where
+you put a PRISMATIC artifact a question too.
+
 **Cyberartifact editions.** Slots are deliberately scarce — five by default,
 four on NATION STATE, against nineteen artifacts worth owning — so what goes in
 a slot matters more than how many you have. The black market answers that by
@@ -198,6 +210,14 @@ everyone in the room watches the same lobby from their own phone.
 Without it, boards live on the device that played them: a runner copies their
 result code after a run and the host merges it into the board by hand.
 
+**It behaves like a game, not a page.** Text selection, the long-press callout,
+the tap flash and native image dragging are off everywhere, so dragging an
+artifact into place does not paint a highlight across the console and a sprite
+cannot be pulled out of the window. Selection is switched back on for the few
+things that really are text — the fields you type into, and the op code and
+invite code a host reads out or pastes somewhere else — which also keeps the
+clipboard fallback working where `navigator.clipboard` is unavailable.
+
 **On a phone or tablet** the game is a full-screen app: the shell is pinned to
 the viewport so nothing scrolls or rubber-bands, zoom is off so a mistimed
 double tap cannot wreck a roll, and the two panels that are not needed moment to
@@ -260,7 +280,7 @@ src/
                         bit packing, format, storage, settings, speed-aware sleep
   data/                 the game as data: dice, artifacts, artifact editions,
                         abilities, bosses, corps, nodes, difficulty tiers,
-                        icons, tuning, effects
+                        icons, tuning, effects, links, legal
   audio/                synth.js (two voices, two buses), sfx.js (the sounds,
                         including one per boss) and music.js (the sequencer)
   engine/               dice-board.js — the 2.5D physics sandbox
@@ -275,8 +295,10 @@ src/
                         remote-store.js talks to the shared one, config.js
                         is the single URL that decides which
   ui/                   the DOM: hud, log, fx, modals, screens, input, viewport,
-                        sheets, market, tutorial, and the start screen with its
-                        leaderboard, live board, archive and tournament views
+                        sheets, market, artifact-drag, tutorial, and the start
+                        screen with its leaderboard, live board, archive and
+                        tournament views
+LICENSE                 all rights reserved; see the licence section below
 assets/                 favicons and the social card the site links to
 worker/                 the shared board: a Cloudflare Worker over one KV
                         namespace, and how to deploy it
@@ -323,10 +345,11 @@ the code format pick it up on their own. (The code format is versioned for
 exactly that reason: more bosses means more ban bits, so `CODE_VERSION` moved to
 2 and codes made before that no longer decode.)
 
-**Scoring hooks fire in a fixed order**, which is what makes builds predictable:
-`perDie` as each die scores, then `bonus` for flat additions, then `multiplier`
-last so it multiplies everything above it. `src/game/execute.js` documents the
-full sequence.
+**Scoring hooks fire in a fixed order within a slot**, which is what makes a
+single artifact predictable: `perDie` as each die scores, then `bonus` for flat
+additions, then `multiplier`. Between slots the order is the player's — each
+slot resolves completely before the next one starts. `src/game/execute.js`
+documents the full sequence.
 
 **Decisions and presentation are separate.** `game/execute.js` works out what
 happens and hands symbolic sources (`{ type: 'artifact', id }`) to
@@ -464,3 +487,27 @@ game's behaviour, balance and save format are unchanged; the start screen,
 threat levels, leaderboards and tournaments were added on top. Republishing it
 as a single-file artifact again would need a bundling step, which this project
 deliberately does not have.
+
+**Source and bug reports** sit as three icons in the bottom-right corner of the
+start screen — the author, the repository, and a button that opens a new issue.
+They are icons rather than labelled buttons because nobody opens the game to
+press them: they stay dim until hovered, name themselves above the icon when
+they are, and carry an `aria-label` for anyone not using a pointer. The URLs are
+all in `src/data/links.js`, and one left blank is simply left out.
+
+## Licence
+
+Copyright © 2026 zaniixx. All rights reserved. See [LICENSE](LICENSE).
+
+This is **not** open source. The repository is public so the game can be played
+and the code read, not so it can be reused: copying, modifying, redistributing,
+self-hosting or lifting any of its code, art, sound or text into another project
+needs written permission first.
+
+One thing worth knowing about a public repository: GitHub's Terms of Service
+give every GitHub user the right to view and fork it within GitHub, whatever a
+licence file says. "All rights reserved" governs what anyone may then *do* with
+that fork — which is nothing, without permission — but it does not stop the fork
+button. Make the repository private if that matters more than being readable.
+
+Found something broken? [Open an issue](https://github.com/zaniixx/Hack-the-Dice/issues/new).

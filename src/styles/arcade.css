@@ -7,7 +7,7 @@
   inset: 0;
   z-index: 70;
   overflow-y: auto;
-  padding: 24px 16px 40px;
+  padding: 24px 16px 64px;
   display: flex;
   justify-content: center;
   color: var(--ink);
@@ -207,6 +207,19 @@
   margin: 0;
 }
 
+/*
+ * Quieter than the note above it: there to be found, not to be read first —
+ * but a copyright notice that cannot be read is not a notice, so it is dimmed
+ * by size rather than by fading into the background.
+ */
+.start-legal {
+  text-align: center;
+  font-size: 15px;
+  color: var(--dim);
+  opacity: .75;
+  margin: 0;
+}
+
 .panel-head {
   display: flex;
   align-items: center;
@@ -311,36 +324,74 @@
 
 /* ---- The author's links -------------------------------------------------- */
 
-.socials {
+/*
+ * Pinned to the corner instead of set across the middle of the screen: nobody
+ * came here to press these, and a row of labelled buttons under LOCK IN read as
+ * though they were part of starting a run. Fixed rather than absolute, so they
+ * stay put while a long leaderboard scrolls behind them.
+ */
+.corner-links {
+  position: fixed;
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
+  gap: 6px;
+  z-index: 2;
 }
 
-.social {
-  --tier: var(--ink);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
-  font-family: var(--px);
-  font-size: 7px;
-  letter-spacing: 1px;
-  text-decoration: none;
-  color: var(--dim);
+.corner-link {
+  --tier: var(--dim);
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
   background: var(--screen-2);
   border: 1px solid var(--screen-line);
+  /* Quiet until wanted. */
+  opacity: .5;
+  transition: opacity .12s steps(2);
 }
 
-.social img { width: 14px; height: 14px; image-rendering: pixelated; }
+.corner-link img {
+  width: 15px;
+  height: 15px;
+  image-rendering: pixelated;
+}
 
-.social:hover,
-.social:focus-visible {
-  color: var(--tier);
+.corner-link:hover,
+.corner-link:focus-visible {
+  opacity: 1;
   border-color: var(--tier);
   outline: none;
+  /* Above its neighbours, so the name below is not drawn under one of them. */
+  z-index: 1;
 }
+
+/*
+ * The name, only while it is wanted. Above the icon rather than beside it:
+ * alongside, it reached across its neighbours and hid them, and right-aligned
+ * it can never run off the edge the cluster is pinned to.
+ */
+.corner-link::after {
+  content: attr(data-label);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  padding: 4px 6px;
+  font-family: var(--px);
+  font-size: 6px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  color: var(--tier);
+  background: var(--screen);
+  border: 1px solid var(--tier);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.corner-link:hover::after,
+.corner-link:focus-visible::after { opacity: 1; }
 
 /* ---- Invite: op code and QR ---------------------------------------------- */
 

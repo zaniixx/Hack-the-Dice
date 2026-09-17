@@ -19,6 +19,7 @@ export const HOW_TO_PLAY = `<div class="how">
   <div><b>ABILITIES</b>Keys 1–3 bend the dice before you commit. Each has limited charges per node.</div>
   <div><b>EXECUTE</b>Bits × Mult hits the firewall. Run out of executes and the trace finds you.</div>
   <div><b>MARKET</b>Spend data scrap between nodes on dice, abilities and cyberartifacts. Unused executes pay a bonus.</div>
+  <div><b>ORDER</b>Cyberartifacts pay out left to right, each one finishing before the next starts. Drag them: +Mult belongs to the left of ×Mult, or it never gets multiplied.</div>
   <div><b>MIGRATE</b>Node 5 is a boss protocol. Beat it to move to a harder server and unlock better gear.</div>
   <div><b>SCORE</b>Nodes breached, servers owned and scrap harvested, multiplied by your threat level.</div>
 </div>`;
