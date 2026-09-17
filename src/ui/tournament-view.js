@@ -164,7 +164,10 @@ export function joinFormHTML(error) {
 }
 
 export function tournamentListHTML(tournaments) {
-  const cards = tournaments.map(tournament => `<div class="op-card">
+  // null means the shared board could not be reached, which is not the same as
+  // having none, and must not be shown as though it were.
+  const offline = tournaments === null;
+  const cards = (tournaments || []).map(tournament => `<div class="op-card">
       <div class="op-top">
         <span class="op-name">${escape(tournament.name)}</span>
         ${tierPill(tournament.difficulty)}
@@ -186,8 +189,10 @@ export function tournamentListHTML(tournaments) {
       <button class="btn lime" data-action="view:host">HOST NEW</button>
       <button class="btn cyan" data-action="view:join">JOIN BY CODE</button>
     </div>
-    <h3 class="sec">ON THIS DEVICE</h3>
-    ${cards || '<p class="empty-note">No tournaments yet. Host one, or join with a code.</p>'}`;
+    <h3 class="sec">YOURS</h3>
+    ${offline
+      ? '<p class="empty-note">The shared board is unreachable, so your tournaments cannot be listed. Check your connection and try again.</p>'
+      : cards || '<p class="empty-note">None yet. Host one, or join with a code — a tournament only appears here once you have hosted it or been given its code.</p>'}`;
 }
 
 /**

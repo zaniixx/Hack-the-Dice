@@ -232,10 +232,13 @@ async function putLiveRun(env, request, id) {
   const entry = cleanEntry(await readBody(request));
   if (!entry.id || !entry.tournament) return fail(400, 'a live run needs an id and a tournament');
 
-  await env.BOARDS.put(KEYS.live(entry.tournament, id),
-    JSON.stringify({ ...entry, updatedAt: Date.now() }),
+  // Marked here rather than trusted from the body: anything on this endpoint is
+  // a run in progress by definition, and the lobby reads the flag to tell a
+  // runner still going from one that has finished.
+  const running = { ...entry, live: true, updatedAt: Date.now() };
+  await env.BOARDS.put(KEYS.live(entry.tournament, id), JSON.stringify(running),
     { expirationTtl: LIVE_TTL_S });
-  return json(entry);
+  return json(running);
 }
 
 async function deleteLiveRun(env, request, id) {

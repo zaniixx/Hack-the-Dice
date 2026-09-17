@@ -1,21 +1,22 @@
 /**
  * The store the game talks to.
  *
- * One module picks the backend and everything else imports `store` from here.
- * The choice is a URL: set API_BASE in services/config.js and boards are shared
- * by every device that opens the game; leave it empty and they stay in this
- * browser, which is what happens on a checkout nobody has configured.
+ * There is one: the shared board in services/remote-store.js. Scores and
+ * tournaments are global, because a leaderboard each browser keeps its own copy
+ * of is not a leaderboard — two people comparing runs would be reading two
+ * different lists and neither would be wrong.
  *
- * Either way the methods are the same, so nothing above this line knows or
- * cares which one it got.
+ * The browser-local store still exists, but only for what genuinely belongs to
+ * a device: the profile, and which tournaments this one has been let into. It
+ * is not a fallback. With no board configured (see services/config.js) reads
+ * return null and the screens say the board is unreachable, which is true and
+ * fixable, rather than showing private numbers and calling them the board.
  */
-import { localStore } from './local-store.js';
 import { remoteStore } from './remote-store.js';
-import { hasRemoteBoard } from './config.js';
 
-export const store = hasRemoteBoard() ? remoteStore : localStore;
+export const store = remoteStore;
 
-/** 'global' when scores are shared between devices, 'device' when they are not. */
+/** Scores and tournaments are shared between devices. */
 export const storeScope = store.scope;
 
 export { compareEntries } from './local-store.js';

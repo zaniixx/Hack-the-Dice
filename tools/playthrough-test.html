@@ -61,6 +61,18 @@ const restoreStorage = () => {
   for (const [key, value] of Object.entries(savedStorage)) localStorage.setItem(key, value);
 };
 
+/*
+ * A board of its own, on a fake address.
+ *
+ * This suite traces runs, and a traced run banks a score. Pointed at the real
+ * board that would put test runs on the live leaderboard, where nothing can
+ * delete them. Installed before any import, because services/config.js reads
+ * the board URL once, at load.
+ */
+const { installFakeBoard, FAKE_BOARD_URL } = await import('./fake-board.js');
+const fakeBoard = installFakeBoard();
+localStorage.setItem('htd_api_base', FAKE_BOARD_URL);
+
 // Boot the real page: its markup, its stylesheets, its entry point.
 const page = await (await fetch('../index.html')).text();
 const markup = page.split('<body>')[1].split('<script')[0];
@@ -104,6 +116,9 @@ try {
   settings.speed = 4; // run the scoring animation at 4x
 
   section('A node, start to finish');
+  const { API_BASE } = await import('../src/services/config.js');
+  check('this suite is on its own board, not the real one', API_BASE, FAKE_BOARD_URL);
+
   check('starts at the title', state.run.phase, 'title');
   startNewRun();
   check('node loaded', state.run.phase, 'ready');
@@ -591,6 +606,7 @@ try {
   say(`THREW: ${error && error.message ? error.message + ' — ' : ''}${(error && error.stack) || error}`, 'fail');
 } finally {
   restoreStorage();
+  fakeBoard.restore();
   if (ping) await Promise.all(sent);
 }
 </script>

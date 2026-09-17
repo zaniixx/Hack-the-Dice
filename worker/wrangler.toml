@@ -8,10 +8,9 @@ main = "index.js"
 compatibility_date = "2024-11-01"
 
 # Created with:  npx wrangler kv namespace create BOARDS
-# Paste the id it prints in below.
 [[kv_namespaces]]
 binding = "BOARDS"
-id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+id = "9187ef761cae43489074090c8dd5ebc2"
 
 [observability]
 enabled = true

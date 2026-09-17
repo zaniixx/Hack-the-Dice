@@ -93,5 +93,13 @@ it still expires on its own after 90 days.
 npx wrangler dev
 ```
 
-serves the API on `http://localhost:8787`. Point `API_BASE` at it to try the
-shared board against a local game.
+serves the API on `http://localhost:8787`. Point the game at it without editing
+any file, from the browser console:
+
+```js
+localStorage.setItem('htd_api_base', 'http://localhost:8787')
+```
+
+That override beats `API_BASE` in `src/services/config.js`; clear the key to go
+back. The test pages use the same hook to stand up an in-memory board of their
+own — see `tools/fake-board.js`.

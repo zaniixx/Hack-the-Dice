@@ -100,16 +100,22 @@ nodes breached, servers owned and scrap harvested, multiplied by the tier —
 deliberately not hacking power, which grows exponentially and would make one
 lucky build unbeatable forever. Boards filter by tier.
 
-The game is a static site, so there is nothing behind it to remember a score:
-boards used to live on whichever browser played them, and a phone and a laptop
-could not see each other's. [`worker/`](worker/) is the fix — one Cloudflare
-Worker over one KV namespace, holding the leaderboard, the tournaments, their
-boards and the runs in progress. Deploy it, put its URL in
-[`src/services/config.js`](src/services/config.js), and every device that opens
-the game is looking at the same standings. Leave it undeployed and everything
-works exactly as before, in the browser. See [worker/README.md](worker/README.md)
-for the three commands, and for what it does and does not promise about a score
-posted by someone who wants to cheat.
+The game is a static site, so there is nothing behind it to remember a score.
+[`worker/`](worker/) is what does — one Cloudflare Worker over one KV namespace,
+holding the leaderboard, the tournaments, their boards and the runs in progress.
+Deploy it, put its URL in [`src/services/config.js`](src/services/config.js),
+and every device that opens the game is looking at the same standings. See
+[worker/README.md](worker/README.md) for the three commands, and for what it
+does and does not promise about a score posted by someone who wants to cheat.
+
+**There is no browser-local board to fall back to**, deliberately. One would
+show numbers nobody else can see and call them the leaderboard, which is worse
+than showing nothing: two people comparing runs would be reading two different
+lists and neither would be wrong. With no board deployed, or with one that
+cannot be reached, the screens say the board is unreachable and show nothing —
+true, and fixable. What stays on the device is what is not a result: your
+handle, your last threat level, whether you have seen the tutorial, and which
+tournaments you have been let into.
 
 **Eight boss protocols, in an order you do not know.** Node 5 of every server
 is guarded by one, and each breaks a different rule of the game:
@@ -198,7 +204,15 @@ everyone rolls identical dice, and bans any bosses, dice, cyberartifacts or
 abilities they like. They get back a five-character **op code** to read out, a
 **QR code** to hold up, and a longer **invite code** to paste — all three name
 the same tournament, because the whole rule set is packed into the code itself.
-Each tournament keeps its own board.
+The QR carries the full join URL, so any camera app opens the game and joins in
+one scan; nothing has to be typed.
+
+Each tournament keeps its own board, and **you only see the ones you were let
+into**. Every tournament lives on the shared board, but listing all of them
+would be a directory of other people's games, so the list is filtered to the
+ones this device hosted or was given the code to. Scanning a QR or entering an
+invite code is what adds one — and knowing an op code is enough to open a
+tournament directly, because knowing it is the permission.
 
 **The lobby is a race.** While a tournament run is being played it publishes
 itself, so the tournament board shows runs in progress alongside finished ones,
@@ -302,7 +316,8 @@ LICENSE                 all rights reserved; see the licence section below
 assets/                 favicons and the social card the site links to
 worker/                 the shared board: a Cloudflare Worker over one KV
                         namespace, and how to deploy it
-tools/                  test pages, a no-cache dev server, and the press tools:
+tools/                  test pages, an in-memory board the tests run against,
+                        a no-cache dev server, and the press tools:
                         poster.html, trailer.html, social-card.html, icon.html,
                         capture_server.py, trailer-music.py
 ```

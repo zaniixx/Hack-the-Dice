@@ -56,10 +56,19 @@ const restoreStorage = () => {
   localStorage.clear();
   for (const [key, value] of Object.entries(savedStorage)) localStorage.setItem(key, value);
 };
-// Start from empty boards so ranks and counts are predictable.
-for (const key of ['htd_scores_v1', 'htd_tournaments_v1', 'htd_tournament_scores_v1', 'htd_profile_v1']) {
+// Start from empty state so ranks and counts are predictable.
+for (const key of ['htd_known_tournaments_v1', 'htd_host_secrets_v1', 'htd_profile_v1']) {
   localStorage.removeItem(key);
 }
+
+/*
+ * Boards are global, so the game needs one to talk to. This stands up an
+ * in-memory board on a fake address and points the game at it, before anything
+ * reads services/config.js — which takes the URL once, at load.
+ */
+const { installFakeBoard, FAKE_BOARD_URL } = await import('./fake-board.js');
+const fakeBoard = installFakeBoard();
+localStorage.setItem('htd_api_base', FAKE_BOARD_URL);
 
 // Boot the real page: its markup, its stylesheets, its entry point.
 const page = await (await fetch('../index.html')).text();
@@ -108,6 +117,9 @@ try {
   await tick();
 
   section('Start screen');
+  const { API_BASE } = await import('../src/services/config.js');
+  check('this suite is on its own board, not the real one', API_BASE, FAKE_BOARD_URL);
+
   check('start screen is up', els.start.hidden, false);
   check('four threat levels offered', els.start.querySelectorAll('.tier-card').length, 4);
   check('pen tester is the default',
@@ -272,6 +284,35 @@ try {
     { bosses: ['antivirus'], dice: ['d20'], artifacts: ['quantum'], abilities: ['overdrive'] });
   check('nonsense codes are refused', decodeTournament('HTD1-not-base64!!'), null);
 
+  section('Whose tournaments you can see');
+  // Store-level only: this navigates nowhere, so the flow either side survives.
+
+  // Somebody else's tournament, put straight on the shared board.
+  fakeBoard.state.tournaments.set('STRNG', {
+    id: 'STRNG', name: 'SOMEONE ELSES GAME', host: 'STRANGER',
+    code: 'HTD-STRANGER', difficulty: 'pen-tester', seed: '', created: Date.now(),
+  });
+
+  const visible = await store.listTournaments();
+  check('the board has it', !!fakeBoard.state.tournaments.get('STRNG'), true);
+  check('but it is not listed here', visible.some(t => t.id === 'STRNG'), false);
+  check('while the one hosted here is', visible.some(t => t.id === decoded.id), true);
+
+  // Reading it by id still works: knowing the code is the permission.
+  check('its code still opens it', (await store.getTournament('STRNG')).host, 'STRANGER');
+  check('and that alone does not list it',
+    (await store.listTournaments()).some(t => t.id === 'STRNG'), false);
+
+  // Joining is what puts it on the list, exactly as a scanned QR would.
+  await store.saveTournament(await store.getTournament('STRNG'));
+  check('joining it lists it',
+    (await store.listTournaments()).some(t => t.id === 'STRNG'), true);
+
+  // And leaving takes it away again without touching the board.
+  await store.deleteTournament('STRNG');
+  check('leaving unlists it',
+    (await store.listTournaments()).some(t => t.id === 'STRNG'), false);
+
   section('Tournament rules are enforced');
   await click('[data-action^="play-tournament"]');
   await tick();
@@ -390,6 +431,7 @@ try {
   say(`THREW: ${error && error.message ? error.message + ' — ' : ''}${(error && error.stack) || error}`, 'fail');
 } finally {
   restoreStorage();
+  fakeBoard.restore();
   if (ping) await Promise.all(sent);
 }
 </script>

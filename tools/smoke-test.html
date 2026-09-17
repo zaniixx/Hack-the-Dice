@@ -14,6 +14,16 @@
 <h1>Hack the Dice — module smoke test</h1>
 <div id="out">running...</div>
 
+<!--
+  Point the game at a board of our own before any module loads.
+
+  This has to be a plain script, not the module below: `import` declarations
+  hoist, so src/services/config.js — which reads the board URL once, at load —
+  would otherwise have already taken the real one, and this suite would write
+  its test scores to the live leaderboard. It did exactly that once.
+-->
+<script>localStorage.setItem('htd_api_base', 'http://fake-board.test');</script>
+
 <script type="module">
 /*
  * Loads every module that does not need the game's markup and checks the rules
@@ -47,12 +57,20 @@ import {
 import {
   seedRun, restoreRng, rngState, gameInt, normaliseSeed, randomSeed,
 } from '../src/core/game-random.js';
+import { qrMatrix, formatBits } from '../src/render/qr.js';
 import { compareEntries, store, storeScope } from '../src/services/store.js';
-import { localStore } from '../src/services/local-store.js';
+import {
+  localStore, knownTournamentIds, rememberTournament, forgetTournament,
+} from '../src/services/local-store.js';
 import { remoteStore } from '../src/services/remote-store.js';
 import { hasRemoteBoard, API_BASE } from '../src/services/config.js';
 import { moodFor } from '../src/game/soundtrack.js';
 import { sfx } from '../src/audio/sfx.js';
+
+import { installFakeBoard, FAKE_BOARD_URL } from './fake-board.js';
+
+/** Serves the board this suite was pointed at, in memory. */
+const fakeBoard = installFakeBoard();
 
 const out = document.getElementById('out');
 let failures = 0;
@@ -375,19 +393,104 @@ try {
     decodeResult(encodeResult({ id: 'x1', handle: 'NEO', score: 4200 })).score, 4200);
   check('a tournament code is not a result code', decodeResult(tournament.code), null);
 
-  // The two stores are interchangeable or they are not a seam at all: store.js
-  // swaps one for the other based on a URL, and nothing above it adapts.
-  const storeMethods = object => Object.keys(object).filter(key => typeof object[key] === 'function').sort();
-  check('the shared board implements the whole local interface',
-    storeMethods(localStore).filter(name => typeof remoteStore[name] !== 'function'), []);
-  check('and adds nothing the game would not find locally',
-    storeMethods(remoteStore).filter(name => typeof localStore[name] !== 'function'), []);
-  check('each store says what it is',
-    [localStore.scope, remoteStore.scope], ['device', 'global']);
-  check('a board is shared only when one is configured', hasRemoteBoard(), !!API_BASE);
-  check('and the game gets the one that matches',
-    store === (API_BASE ? remoteStore : localStore), true);
-  check('the scope the screens read agrees with it', storeScope, store.scope);
+  // There is one board and it is the shared one. A browser-local fallback would
+  // show private numbers and call them the leaderboard, so there is not one.
+  check('the game talks to the shared board', store === remoteStore, true);
+  check('and says so', [storeScope, store.scope], ['global', 'global']);
+  check('nothing reads the local store for a board',
+    ['listScores', 'listTournaments', 'listTournamentScores']
+      .every(name => store[name] !== localStore[name]), true);
+
+  // A reachable board answers with lists. The first check is the guard rail:
+  // if the suite is not pointed at its own board it must not run the rest.
+  check('the suite is on its own board, not the real one', API_BASE, FAKE_BOARD_URL);
+  check('a board is configured', hasRemoteBoard() && !!API_BASE, true);
+  check('scores read as a list', Array.isArray(await store.listScores({})), true);
+  check('tournaments read as a list', Array.isArray(await store.listTournaments()), true);
+  check('and a run banks', !!(await store.addScore(
+    { id: 'smoke-1', handle: 'SMOKE', score: 1, difficulty: 'pen-tester', server: 1, node: 1 })), true);
+
+  /*
+   * An unreachable board reads as null, never as an empty one.
+   *
+   * The difference is the whole point: [] means "nothing on the board yet" and
+   * null means "there is no board to ask", and the screens say different things
+   * for each. Getting this wrong would show every player an empty leaderboard
+   * and call it the standings.
+   */
+  fakeBoard.setOffline(true);
+  check('scores read as unreachable', await store.listScores({}), null);
+  check('tournaments read as unreachable', await store.listTournaments(), null);
+  check('a tournament board reads as unreachable', await store.listTournamentScores('X'), null);
+  check('a live lobby reads as unreachable', await store.listLiveRuns('X'), null);
+  check('and a run cannot be banked',
+    await store.addScore({ id: 'smoke-2', handle: 'SMOKE' }), null);
+  check('but a profile still works, being nothing to do with the board',
+    typeof (await store.getProfile()).handle, 'string');
+  fakeBoard.setOffline(false);
+  check('and it comes back', Array.isArray(await store.listScores({})), true);
+
+  // Preferences are the device's, and still work with no board at all.
+  check('the profile is still local', typeof (await store.getProfile()).handle, 'string');
+
+  // A tournament is visible once this device hosts or joins it, and not before.
+  const seen = knownTournamentIds();
+  check('an unknown tournament is not in the known list', seen.includes('ZZTOP'), false);
+  rememberTournament('ZZTOP');
+  check('joining one adds it', knownTournamentIds().includes('ZZTOP'), true);
+  rememberTournament('ZZTOP');
+  check('and twice is still once',
+    knownTournamentIds().filter(id => id === 'ZZTOP').length, 1);
+  forgetTournament('ZZTOP');
+  check('leaving one drops it', knownTournamentIds().includes('ZZTOP'), false);
+
+  /*
+   * QR format information.
+   *
+   * The data area can be flawless and the code still unreadable: the fifteen
+   * format bits say which mask was used, and writing them in the wrong order
+   * masks the data with one mask while announcing another. Nothing on screen
+   * looks wrong, so it is checked here against the published words rather than
+   * against ourselves.
+   */
+  const FORMAT_L = ['111011111000100', '111001011110011', '111110110101010', '111100010011101',
+    '110011000101111', '110001100011000', '110110001000001', '110100101110110'];
+  check('the format words are the published ones',
+    FORMAT_L.map((_, mask) => formatBits(mask).toString(2).padStart(15, '0')), FORMAT_L);
+
+  // Read the format modules back out, most significant bit first.
+  const formatIn = (qr, copy) => {
+    const n = qr.size;
+    let bits = '';
+    for (let i = 0; i < 15; i++) {
+      let row;
+      let col;
+      if (copy === 1) {
+        if (i < 6) { row = 8; col = i; }
+        else if (i === 6) { row = 8; col = 7; }
+        else if (i === 7) { row = 8; col = 8; }
+        else if (i === 8) { row = 7; col = 8; }
+        else { row = 14 - i; col = 8; }
+      } else if (i < 7) { row = n - 1 - i; col = 8; }
+      else { row = 8; col = n - 15 + i; }
+      bits += qr.modules[row][col];
+    }
+    return bits;
+  };
+
+  const sample = qrMatrix('HTD-ABC1234567890');
+  check('a code becomes a matrix', !!sample, true);
+  check('sized as its version says', sample.size, 17 + 4 * sample.version);
+  check('its format says the mask the data was masked with',
+    formatIn(sample, 1), FORMAT_L[sample.mask]);
+  check('and both copies of it agree', formatIn(sample, 2), formatIn(sample, 1));
+
+  // A join URL needs byte mode, and is the payload a phone camera actually sees.
+  const urlQR = qrMatrix('https://hackthedice.zanix.tech/#join=HTD-ABC123');
+  check('a join URL fits in a QR', !!urlQR, true);
+  check('and its format is written the same way',
+    formatIn(urlQR, 1), FORMAT_L[urlQR.mask]);
+  check('lower case and # force byte mode, so it is bigger', urlQR.size > sample.size, true);
 
   // The soundtrack follows tension, not location.
   check('the menu has its own mood', moodFor({ phase: 'title' }), 'menu');

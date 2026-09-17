@@ -8,9 +8,14 @@
 import { store, compareEntries } from '../services/store.js';
 import { runResult } from './score.js';
 
-/** Where `entry` sits on a board, 1-based, or null if it is not on it. */
+/**
+ * Where `entry` sits on a board, 1-based.
+ *
+ * Null for a board it is not on, and for no board at all: an unreachable board
+ * has no placing to report, which is the same thing to a caller.
+ */
 export function rankOf(board, entry) {
-  const index = board.findIndex(row => row.id === entry.id);
+  const index = (board || []).findIndex(row => row.id === entry.id);
   return index === -1 ? null : index + 1;
 }
 
@@ -18,16 +23,20 @@ export function rankOf(board, entry) {
  * Record a finished run.
  *
  * A run marked `cheated` is scored and shown as usual but never written to a
- * board. The boards are shared between devices now, and one assembled rig would
- * sit at the top of them forever.
+ * board. The boards are shared between devices, and one assembled rig would sit
+ * at the top of them forever.
  *
- * @returns {{entry, rank, tournamentRank}} the entry and where it placed
+ * `banked` is false when the board could not be reached. The run still has its
+ * score and the run-over screen still shows it; what it does not have is a
+ * place on a board nobody could write to.
+ *
+ * @returns {{entry, rank, tournamentRank, banked}} the entry and where it placed
  */
 export async function submitRun(run, { reason }) {
   const entry = runResult(run, { reason });
-  if (run.cheated) return { entry, rank: null, tournamentRank: null };
+  if (run.cheated) return { entry, rank: null, tournamentRank: null, banked: false };
 
-  await store.addScore(entry);
+  const banked = !!(await store.addScore(entry));
   const board = await store.listScores({ difficulty: entry.difficulty });
   const rank = rankOf(board, entry);
 
@@ -38,7 +47,7 @@ export async function submitRun(run, { reason }) {
     tournamentRank = rankOf(tournamentBoard, entry);
   }
 
-  return { entry, rank, tournamentRank };
+  return { entry, rank, tournamentRank, banked };
 }
 
 /** Top entries, optionally for one threat level. */

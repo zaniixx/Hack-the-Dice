@@ -263,7 +263,11 @@ function drawFormat(qr, mask) {
   const size = qr.size;
 
   for (let i = 0; i < 15; i++) {
-    const bit = (bits >> i) & 1;
+    // Most significant bit first: the module beside the top-left finder carries
+    // bit 14, not bit 0. Writing it the other way round produces a code that
+    // looks right and that no scanner can read, because the data is masked with
+    // one mask while the format claims another.
+    const bit = (bits >> (14 - i)) & 1;
 
     // Around the top-left finder.
     if (i < 6) qr.modules[8][i] = bit;

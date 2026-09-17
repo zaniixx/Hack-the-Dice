@@ -1,27 +1,35 @@
 /**
- * The shared board, over HTTP.
+ * The board, over HTTP. There is only one, and it is shared.
  *
- * Same async methods as local-store.js, because that was always the point of
- * making them async: the screens already await everything, so swapping the
- * backend underneath them changes nothing above.
+ * Scores and tournaments are global: every device that opens the game is
+ * looking at the same standings, because a leaderboard each browser keeps its
+ * own copy of is not a leaderboard. There is deliberately no local fallback —
+ * a board that quietly answered from this browser when the network was down
+ * would show numbers nobody else can see and call them the board. When it
+ * cannot be reached a read returns null, and the screen says so.
  *
- * Two things stay local whatever this does. A profile — your handle, your last
- * threat level, whether you have seen the tutorial — is about this device, not
- * about the board, and putting it on a server would mean accounts. And every
- * board read falls back to the local one when the network is not there, so a
- * flaky connection degrades to the old behaviour instead of an empty screen.
+ * Two things stay on the device, because neither is a result. A profile — your
+ * handle, your last threat level, whether you have seen the tutorial — is a
+ * preference, and putting it on a server would mean accounts. And the list of
+ * tournaments this device knows about is what stops the tournament screen being
+ * a directory of other people's games: the board holds them all, and you see
+ * the ones you hosted or were given the code to.
  *
  * See services/config.js for the URL, and worker/ for what answers it.
  */
 import { API_BASE, API_TIMEOUT_MS } from './config.js';
-import { localStore, compareEntries } from './local-store.js';
+import {
+  localStore, compareEntries, knownTournamentIds, rememberTournament, forgetTournament,
+} from './local-store.js';
 
 /**
  * One request, with a timeout and no exceptions escaping.
  *
- * @returns {Promise<*>} the parsed body, or null if the board could not answer
+ * @returns {*} the parsed body, or null if the board could not answer
  */
 async function call(path, { method = 'GET', body = null } = {}) {
+  if (!API_BASE) return null; // no board configured: see services/config.js
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
@@ -35,7 +43,7 @@ async function call(path, { method = 'GET', body = null } = {}) {
     return await response.json();
   } catch {
     // Offline, blocked, slow, or misconfigured: all the same to a caller that
-    // has a local board to fall back on.
+    // has to tell the player the board is not there.
     return null;
   } finally {
     clearTimeout(timer);
@@ -74,40 +82,33 @@ export const remoteStore = {
   /** Where this store keeps things, for the UI to be honest about it. */
   scope: 'global',
 
-  // ---- Profile: this device's own, never the board's -----------------------
+  // ---- Preferences: this device's own, never the board's -------------------
 
   getProfile: (...args) => localStore.getProfile(...args),
   saveProfile: (...args) => localStore.saveProfile(...args),
   rememberHandle: (...args) => localStore.rememberHandle(...args),
 
-  // ---- The global leaderboard ---------------------------------------------
+  // ---- The leaderboard -----------------------------------------------------
 
+  /** @returns {?Array} the board, or null when it cannot be reached. */
   async listScores({ difficulty = null, limit = 100 } = {}) {
     const query = new URLSearchParams();
     if (difficulty) query.set('difficulty', difficulty);
     query.set('limit', String(limit));
 
-    const board = await call('/scores?' + query);
-    return board || localStore.listScores({ difficulty, limit });
+    return call('/scores?' + query);
   },
 
-  /**
-   * Bank a result.
-   *
-   * It is written locally either way, so a run played with the board
-   * unreachable is still on this device's board and is not simply lost.
-   */
+  /** @returns {?object} the entry once the board has it, or null if it has not. */
   async addScore(entry) {
-    await localStore.addScore(entry);
-    await call('/scores', { method: 'POST', body: entry });
-    return entry;
+    const banked = await call('/scores', { method: 'POST', body: entry });
+    return banked ? entry : null;
   },
 
   // ---- Runs in progress, for the tournament lobby --------------------------
 
   async listLiveRuns(tournamentId) {
-    const rows = await call(`/tournaments/${encodeURIComponent(tournamentId)}/live`);
-    return rows || localStore.listLiveRuns(tournamentId);
+    return call(`/tournaments/${encodeURIComponent(tournamentId)}/live`);
   },
 
   async setLiveRun(entry) {
@@ -118,64 +119,81 @@ export const remoteStore = {
   async clearLiveRun(id, tournamentId = '') {
     const query = tournamentId ? '?tournament=' + encodeURIComponent(tournamentId) : '';
     await call(`/live/${encodeURIComponent(id)}${query}`, { method: 'DELETE' });
-    await localStore.clearLiveRun(id);
   },
 
   // ---- Tournaments ---------------------------------------------------------
 
   /**
-   * Every tournament on the board, plus any this device knows about that the
-   * board does not — one created while offline, or joined from a code.
+   * The tournaments this device has any business seeing.
+   *
+   * Every tournament lives on the shared board, but a list of all of them would
+   * be a directory of games nobody here was invited to. So the board is
+   * filtered to the ones this device hosted or was given the code to — scanning
+   * a QR or typing an invite code is what adds one, and there is no other way.
+   *
+   * @returns {?Array} the list, or null when the board cannot be reached.
    */
   async listTournaments() {
-    const remote = await call('/tournaments');
-    const local = await localStore.listTournaments();
-    if (!remote) return local;
+    const board = await call('/tournaments');
+    if (!board) return null;
 
-    const ids = new Set(remote.map(row => row.id));
-    return [...remote, ...local.filter(row => !ids.has(row.id))]
+    const known = new Set(knownTournamentIds());
+    return board
+      .filter(row => known.has(row.id))
       .sort((a, b) => (b.created || 0) - (a.created || 0));
   },
 
-  /** The board's copy, or this device's if the board has never heard of it. */
+  /**
+   * One tournament, by id.
+   *
+   * Not filtered by what this device knows: asking for a specific op code is
+   * how someone joins, so knowing the code is the permission.
+   */
   async getTournament(id) {
-    const remote = await call('/tournaments/' + encodeURIComponent(id));
-    return remote || localStore.getTournament(id);
+    return call('/tournaments/' + encodeURIComponent(id));
   },
 
+  /**
+   * Put a tournament on the board, and record that this device knows it.
+   *
+   * Hosting one and joining one both land here, which is what makes the
+   * tournament list exactly "mine, and the ones I was invited to".
+   */
   async saveTournament(tournament) {
-    await localStore.saveTournament(tournament);
-    await call('/tournaments/' + encodeURIComponent(tournament.id), {
+    rememberTournament(tournament.id);
+    const saved = await call('/tournaments/' + encodeURIComponent(tournament.id), {
       method: 'PUT',
       body: { ...tournament, secret: hostSecretFor(tournament.id) },
     });
-    return tournament;
+    return saved ? tournament : null;
   },
 
   async deleteTournament(id) {
-    await localStore.deleteTournament(id);
+    forgetTournament(id);
     const secret = encodeURIComponent(hostSecretFor(id));
     await call(`/tournaments/${encodeURIComponent(id)}?secret=${secret}`, { method: 'DELETE' });
   },
 
   async listTournamentScores(id) {
-    const board = await call(`/tournaments/${encodeURIComponent(id)}/scores`);
-    return board || localStore.listTournamentScores(id);
+    return call(`/tournaments/${encodeURIComponent(id)}/scores`);
   },
 
   /**
    * Add a result to a tournament board.
    *
+   * Merging one in also means this device now knows that tournament, so a host
+   * handed a result code for a game they did not run can still see its board.
+   *
    * @returns {boolean} false when this exact result was already there, which is
    *          how merging a result code twice stays harmless.
    */
   async addTournamentScore(id, entry) {
-    const isNewLocally = await localStore.addTournamentScore(id, entry);
+    rememberTournament(id);
     const result = await call(`/tournaments/${encodeURIComponent(id)}/scores`, {
       method: 'POST',
       body: entry,
     });
-    return result ? result.isNew : isNewLocally;
+    return result ? result.isNew : false;
   },
 };
 

@@ -19,9 +19,11 @@ const shortDate = at => new Date(at).toLocaleDateString(undefined, { month: 'sho
 
 /** Finished results and runs in progress, ranked together. */
 export function mergeBoard(finished, live) {
+  // Either half is null when the shared board could not be reached. An empty
+  // race is what there is to draw; the screen around it says why.
   return [
-    ...finished.map(entry => ({ ...entry, live: false })),
-    ...live.map(entry => ({ ...entry, live: true })),
+    ...(finished || []).map(entry => ({ ...entry, live: false })),
+    ...(live || []).map(entry => ({ ...entry, live: true })),
   ].sort(compareEntries);
 }
 

@@ -17,7 +17,7 @@ import { COPYRIGHT } from '../data/legal.js';
 import { iconURL } from '../render/icon-sprites.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
-import { store, storeScope } from '../services/store.js';
+import { store } from '../services/store.js';
 import {
   createTournament, decodeTournament, decodeResult, encodeResult, setActiveTournament, isOpCode,
 } from '../game/tournament.js';
@@ -160,23 +160,19 @@ function homeHTML() {
   </div>`;
 }
 
-/**
- * What the boards are, in one line.
- *
- * Which one is true depends on whether a shared board is configured — see
- * services/config.js — so it is read from the store rather than written twice.
- */
+/** What the boards are, in one line. */
 function footNote() {
-  return storeScope === 'global'
-    ? `Everything runs in your browser, but the boards do not: scores and
-       tournaments are shared, so every device sees the same standings.`
-    : `Everything runs in your browser. Scores and tournaments are kept on
-       this device — tournament codes carry the rules to other machines.`;
+  return `The game runs in your browser; the boards do not. Scores and
+    tournaments are shared, so every device sees the same standings — and a
+    tournament is yours to see once you host it or are given its code.`;
 }
 
 async function leaderboardHTML() {
   const filter = boardFilter === 'all' ? null : boardFilter;
+  // null is the board being unreachable, which is a different thing to say
+  // than "nothing on it yet".
   const entries = await topScores({ difficulty: filter, limit: 25 });
+  const offline = entries === null;
 
   return `<div class="start-inner">
     <div class="panel-head">
@@ -186,8 +182,10 @@ async function leaderboardHTML() {
     <p class="lede">Score is nodes breached, servers owned and scrap harvested, multiplied by
       the threat level you ran.</p>
     ${difficultyTabsHTML(boardFilter)}
-    ${boardHTML(entries, {
-      empty: 'Nothing on this board yet. LOCK IN and put something on it.',
+    ${boardHTML(entries || [], {
+      empty: offline
+        ? 'The shared board is unreachable. Scores are kept on it, not in this browser, so there is nothing to show until it answers.'
+        : 'Nothing on this board yet. LOCK IN and put something on it.',
       showTier: boardFilter === 'all',
       highlight: lastResult && lastResult.id,
     })}
@@ -199,6 +197,8 @@ async function tournamentsHTML() {
 }
 
 async function tournamentDetailView() {
+  // Either half can be missing when the board is unreachable; an empty race is
+  // the honest thing to draw, and the list above it says why.
   const [finished, live] = await Promise.all([
     tournamentScores(openTournament.id),
     store.listLiveRuns(openTournament.id),

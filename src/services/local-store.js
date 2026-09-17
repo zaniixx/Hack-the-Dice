@@ -1,19 +1,26 @@
 /**
- * The browser-local store: profile, leaderboards and tournaments in
- * localStorage.
+ * What this browser keeps for itself.
  *
- * Every method is async even though localStorage is not. That is deliberate:
- * it is the seam where a networked backend would slot in, and having the UI
- * already await these calls means adding one would not ripple through the
- * screens. See services/store.js.
+ * Boards are not in here any more — scores and tournaments live on the shared
+ * board, so that every device sees the same ones (see services/remote-store.js).
+ * What is left is the two things that are genuinely about this device:
  *
- * Scope of the data: this browser, on this device. Tournament *rules* travel
- * between devices inside the join code, and single results travel inside a
- * result code, but nothing syncs on its own.
+ *   the profile        your handle, your last threat level, whether you have
+ *                      seen the tutorial — preferences, not results
+ *   known tournaments  which tournaments this device has any business seeing,
+ *                      which is the ones it hosted and the ones it joined
+ *
+ * That second one is what keeps the tournament list from being a directory of
+ * strangers' games: the board holds every tournament, and this decides which of
+ * them are yours to see.
+ *
+ * Every method is async even though localStorage is not, so that the screens
+ * await these calls the same way they await the networked ones.
  */
 import { readJSON, writeJSON } from '../core/storage.js';
 
 const PROFILE_KEY = 'htd_profile_v1';
+const KNOWN_KEY = 'htd_known_tournaments_v1';
 const SCORES_KEY = 'htd_scores_v1';
 const TOURNAMENTS_KEY = 'htd_tournaments_v1';
 const TOURNAMENT_SCORES_KEY = 'htd_tournament_scores_v1';
@@ -48,6 +55,27 @@ const sortedBoard = entries => [...entries].sort(compareEntries).slice(0, MAX_BO
 
 /** Drop any entry already on the board with the same id. */
 const withoutDuplicate = (entries, id) => entries.filter(entry => entry.id !== id);
+
+/**
+ * Tournament ids this device hosted or joined.
+ *
+ * Hosting one or entering its code is what puts it here, and that is the only
+ * way in: a tournament nobody on this device asked for never appears.
+ */
+export function knownTournamentIds() {
+  const ids = readJSON(KNOWN_KEY, []);
+  return Array.isArray(ids) ? ids : [];
+}
+
+export function rememberTournament(id) {
+  if (!id) return;
+  const ids = knownTournamentIds();
+  if (!ids.includes(id)) writeJSON(KNOWN_KEY, [id, ...ids].slice(0, 200));
+}
+
+export function forgetTournament(id) {
+  writeJSON(KNOWN_KEY, knownTournamentIds().filter(known => known !== id));
+}
 
 export const localStore = {
   /** Where this store keeps things, for the UI to be honest about it. */
