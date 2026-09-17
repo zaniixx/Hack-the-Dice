@@ -162,9 +162,7 @@ function homeHTML() {
 
 /** What the boards are, in one line. */
 function footNote() {
-  return `The game runs in your browser; the boards do not. Scores and
-    tournaments are shared, so every device sees the same standings — and a
-    tournament is yours to see once you host it or are given its code.`;
+  return `The game is still under development. Any reported bugs or suggestions are welcome.`;
 }
 
 async function leaderboardHTML() {

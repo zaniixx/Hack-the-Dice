@@ -87,7 +87,7 @@ const { settings } = await import('../src/core/settings.js');
 const { rollDice, onDiceSettled } = await import('../src/game/turn.js');
 const { generateShop } = await import('../src/game/shop.js');
 const { executePayload } = await import('../src/game/execute.js');
-const { decodeTournament, decodeResult, encodeResult, isAllowed } = await import('../src/game/tournament.js');
+const { decodeTournament, decodeResult, encodeResult, isAllowed, tournamentRules } = await import('../src/game/tournament.js');
 const { publish: publishLiveRun } = await import('../src/game/live-run.js');
 const { mergeBoard } = await import('../src/ui/live-board.js');
 const { runScore } = await import('../src/game/score.js');
@@ -283,6 +283,29 @@ try {
   check('code carries the bans', decoded.bans,
     { bosses: ['antivirus'], dice: ['d20'], artifacts: ['quantum'], abilities: ['overdrive'] });
   check('nonsense codes are refused', decodeTournament('HTD1-not-base64!!'), null);
+
+  section('A tournament off the board is a whole one');
+  /*
+   * The board keeps the join code and throws the rest of the rules away, so a
+   * row read back has no `bans` of its own. Everything that shows a rule set
+   * reads `bans`, and one missing took the whole start screen down: the view
+   * threw mid-render, the screen never repainted, and every button on it looked
+   * dead. The code carries the rules, so the store unpacks them back.
+   */
+  const rawRow = fakeBoard.state.tournaments.get(decoded.id);
+  check('the board really does drop the rules', rawRow.bans, undefined);
+
+  const readBack = (await store.listTournaments()).find(t => t.id === decoded.id);
+  check('but the store hands back a whole tournament', !!readBack.bans, true);
+  check('with the bans that were set on it', readBack.bans.bosses, ['antivirus']);
+  check('and getting one by id is whole too',
+    !!(await store.getTournament(decoded.id)).bans, true);
+  check('its rules can be described without throwing',
+    typeof tournamentRules(readBack).join(' '), 'string');
+
+  // Belt and braces: a rule set with no bans at all must not take a screen down.
+  check('a tournament with no bans still describes itself',
+    typeof tournamentRules({ difficulty: 'pen-tester', seed: '' }).join(' '), 'string');
 
   section('Whose tournaments you can see');
   // Store-level only: this navigates nowhere, so the flow either side survives.

@@ -41,6 +41,25 @@ const cleanEntry = entry => ({
   at: num(entry.at) || Date.now(),
 });
 
+/**
+ * The same shaping the Worker does to a tournament.
+ *
+ * This matters more than it looks: the Worker keeps the join code and throws
+ * everything else away, `bans` included, because the code already carries the
+ * whole rule set. A fake board that stored whatever it was sent would let a
+ * client that expects `bans` on a board row pass here and break in production.
+ */
+const cleanTournament = t => ({
+  id: str(t.id, 8).toUpperCase(),
+  name: str(t.name, 40).toUpperCase(),
+  host: str(t.host, 16).toUpperCase(),
+  code: str(t.code, 200),
+  difficulty: str(t.difficulty, 24),
+  seed: str(t.seed, 12).toUpperCase(),
+  created: num(t.created) || Date.now(),
+  secret: str(t.secret, 64),
+});
+
 const merge = (board, entry) =>
   [...board.filter(row => row.id !== entry.id), entry].sort(compare).slice(0, MAX_BOARD_SIZE);
 
@@ -111,7 +130,7 @@ export function installFakeBoard() {
           if (existing && existing.secret && existing.secret !== body.secret) {
             return json({ error: 'not yours' }, 403);
           }
-          state.tournaments.set(id, { ...body, id });
+          state.tournaments.set(id, cleanTournament({ ...body, id }));
           const { secret, ...rest } = state.tournaments.get(id);
           return json(rest);
         }

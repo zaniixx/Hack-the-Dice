@@ -242,7 +242,10 @@ export function bossForNode(server, seed = '') {
 export function tournamentRules(tournament) {
   const lines = [difficultyOf(tournament.difficulty).name];
   if (tournament.seed) lines.push(`Fixed seed: ${tournament.seed} — everyone rolls the same dice`);
-  const { bosses, dice, artifacts, abilities } = tournament.bans;
+  // A tournament always carries its bans, but one rebuilt from a board row
+  // whose code would not decode might not — and a missing ban list is not worth
+  // taking the whole screen down for.
+  const { bosses = [], dice = [], artifacts = [], abilities = [] } = tournament.bans || {};
 
   if (bosses.length) {
     lines.push(`Bosses banned: ${bosses.map(id => BOSSES[id]?.name || id).join(', ')}`);

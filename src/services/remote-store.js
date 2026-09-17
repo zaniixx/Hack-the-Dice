@@ -21,6 +21,7 @@ import { API_BASE, API_TIMEOUT_MS } from './config.js';
 import {
   localStore, compareEntries, knownTournamentIds, rememberTournament, forgetTournament,
 } from './local-store.js';
+import { decodeTournament } from '../game/tournament.js';
 
 /**
  * One request, with a timeout and no exceptions escaping.
@@ -48,6 +49,25 @@ async function call(path, { method = 'GET', body = null } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * A board row, back into a whole tournament.
+ *
+ * The board keeps the join code and nothing else about the rules, because the
+ * code already carries every one of them — the threat level, the fixed seed and
+ * all four ban lists, packed into a string short enough to read out. Unpacking
+ * it here is what makes a row off the board the same shape as the one that was
+ * put on it; without this, `bans` is missing and anything that reads the rules
+ * throws on it.
+ *
+ * A row whose code will not decode keeps what the board had, which is enough to
+ * list and open it.
+ */
+function whole(row) {
+  if (!row) return row;
+  const decoded = decodeTournament(row.code);
+  return decoded ? { ...decoded, created: row.created } : row;
 }
 
 /**
@@ -140,6 +160,7 @@ export const remoteStore = {
     const known = new Set(knownTournamentIds());
     return board
       .filter(row => known.has(row.id))
+      .map(whole)
       .sort((a, b) => (b.created || 0) - (a.created || 0));
   },
 
@@ -150,7 +171,7 @@ export const remoteStore = {
    * how someone joins, so knowing the code is the permission.
    */
   async getTournament(id) {
-    return call('/tournaments/' + encodeURIComponent(id));
+    return whole(await call('/tournaments/' + encodeURIComponent(id)));
   },
 
   /**
