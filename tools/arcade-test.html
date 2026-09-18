@@ -81,7 +81,7 @@ const state = await import('../src/game/state.js');
 const board = await import('../src/engine/dice-board.js');
 const session = await import('../src/game/session.js');
 const { settings } = await import('../src/core/settings.js');
-const { rollDice, onDiceSettled } = await import('../src/game/turn.js');
+const { rollDice, onDiceSettled, useAbility } = await import('../src/game/turn.js');
 const { generateShop } = await import('../src/game/shop.js');
 const { executePayload } = await import('../src/game/execute.js');
 const { decodeTournament, isAllowed, tournamentRules } = await import('../src/game/tournament.js');
@@ -205,6 +205,52 @@ try {
    * key, so this presses the keys: a real keydown through the real handler,
    * against a run that is actually in progress.
    */
+  /*
+   * The junk that changes the run rather than the sum.
+   *
+   * Four of these reach outside the scoring pipeline — a die that leaves the
+   * pool, an ability that breaks one, a node that restarts, a ceiling on Bits —
+   * so they are checked against a live run rather than as arithmetic.
+   */
+  section('Found junk does what it says');
+  const dieBoard = await import('../src/engine/dice-board.js');
+
+  state.run.dice = ['battery', 'd6', 'd6', 'd6', 'd6'];
+  state.run.stacks.wear = 0;
+  dieBoard.setDicePool(state.run.dice);
+  check('a battery starts as the best die at its price', dieBoard.faceCap(dieBoard.dice[0]), 10);
+  state.run.stacks.wear = 4;
+  check('and is worn down by the nodes it survives', dieBoard.faceCap(dieBoard.dice[0]), 6);
+  check('while the dice beside it are untouched', dieBoard.faceCap(dieBoard.dice[1]), 6);
+
+  state.run.abilities = ['percussive'];
+  state.run.charges = { percussive: 1 };
+  session.beginNode();
+  await tick();
+  rollDice();
+  settle();
+  const poolBefore = state.run.dice.length;
+  useAbility('percussive');
+  await tick();
+  settle();
+  check('hitting it costs you a die', state.run.dice.length, poolBefore - 1);
+  check('and the board is rebuilt to match', dieBoard.dice.length, state.run.dice.length);
+
+  state.run.abilities = ['reboot'];
+  state.run.charges = { reboot: 1 };
+  session.beginNode();
+  await tick();
+  rollDice();
+  settle();
+  state.run.enemy.hp = 3;
+  state.run.executes = 1;
+  useAbility('reboot');
+  await tick();
+  check('turning it off and on again puts the firewall back',
+    state.run.enemy.hp, state.run.enemy.max);
+  check('and gives you the executes to try again',
+    state.run.executes, state.run.maxExecutes);
+
   section('Keys can be moved');
   const keys = await import('../src/core/keybinds.js');
   // This page shares storage with the game, so whatever the player has set is

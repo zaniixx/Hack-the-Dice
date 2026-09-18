@@ -13,6 +13,8 @@
  *   popDie   make a die hop and sparkle after it has been changed
  */
 import { DICE } from './dice.js';
+import { MIN_DICE } from './rules.js';
+import { gameInt } from '../core/game-random.js';
 
 /** Highest face a die can show. */
 const maxFace = die => DICE[die.type].faces;
@@ -43,6 +45,9 @@ function arm({ run, log, notify }, multiplier, name) {
   run.overdriveLabel = name;
   log(`> ${name.toLowerCase()} armed: ×${multiplier} on execute`, 'mag');
 }
+
+/** A die picked without a preference, off the seeded stream. */
+const anyOf = list => list[gameInt(0, list.length - 1)];
 
 export const ABILITIES = {
   bitshift: {
@@ -179,6 +184,66 @@ export const ABILITIES = {
       }
       for (const die of changed) setValue(die, maxFace(die), popDie);
       log(`> kernel exploit: ${changed.length} dice forced to max`, 'mag');
+    },
+  },
+
+  // ---- Found junk ---------------------------------------------------------
+  // Not tools so much as things that have worked before. Cheap, and two of them
+  // cost you something real.
+  cartridge: {
+    name: 'BLOW ON THE CARTRIDGE', tier: 1, cost: 4, charges: 1, color: '#7dffb0',
+    desc: 'Reroll your lowest die. It works.',
+    use({ dice, log, notify, popDie, run }) {
+      const candidates = dice.filter(die => die.value < maxFace(die));
+      if (!candidates.length) {
+        notify('NOTHING TO BLOW ON');
+        return false;
+      }
+      const die = lowest(candidates);
+      // Straight off the seeded stream, so a seed still replays exactly.
+      setValue(die, gameInt(1, maxFace(die)), popDie);
+      log(`> blew on it: die is now ${die.value}`, 'cyan');
+      return run && true;
+    },
+  },
+  dumpster: {
+    name: 'DUMPSTER DIVE', tier: 1, cost: 7, charges: 1, color: '#ffc23d',
+    desc: 'Gain Data Scrap equal to the node you are on.',
+    use({ run, log }) {
+      const found = Math.max(1, run.node);
+      run.scrap += found;
+      log(`> dumpster dive: ${found} data scrap, and a sandwich`, 'amber');
+    },
+  },
+  percussive: {
+    name: 'PERCUSSIVE MAINTENANCE', tier: 2, cost: 8, charges: 1, color: '#ff7a5a',
+    desc: 'Reroll every die, locks and all. One of them breaks for good.',
+    use({ dice, run, log, notify }) {
+      if (run.dice.length <= MIN_DICE) {
+        notify('POOL TOO SMALL TO BREAK ONE');
+        return false;
+      }
+      // The pool loses one; the board is rerolled by the caller in turn.js,
+      // which is why this only has to say which die went.
+      const goner = anyOf(run.dice);
+      run.dice.splice(run.dice.indexOf(goner), 1);
+      run.hitIt = true; // turn.js picks this up and rerolls everything
+      log(`> you hit it. it helped. the ${DICE[goner].name.toLowerCase()} fell off`, 'red');
+      return dice && true;
+    },
+  },
+  reboot: {
+    name: 'TURN IT OFF AND ON AGAIN', tier: 2, cost: 12, charges: 1, color: '#3df2ff',
+    desc: 'Restores the firewall to full — and refills every Execute and reroll.',
+    use({ run, log, notify }) {
+      if (!run.enemy) {
+        notify('NOTHING TO REBOOT');
+        return false;
+      }
+      run.enemy.hp = run.enemy.max;
+      run.executes = run.maxExecutes;
+      run.rebooted = true; // turn.js refills the rerolls on the next roll
+      log('> have you tried turning it off and on again', 'cyan');
     },
   },
 };

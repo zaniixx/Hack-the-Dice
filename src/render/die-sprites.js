@@ -4,10 +4,17 @@
  * Every face the game can show is drawn once and cached, so the board loop only
  * ever blits. A die is a rounded square (`cut` controls how rounded), lit from
  * the top, with either pips or a two-digit number on it.
+ *
+ * Except when it is not a die at all. Half the found junk is a coin, a battery,
+ * a brick — things that would read as nonsense drawn as a tinted cube with pips
+ * on it. Those are painted whole by render/junk-sprites.js instead. They still
+ * cache the same way, which is why a die whose look changes as it wears has to
+ * say so in the cache key.
  */
 import { DICE } from '../data/dice.js';
 import { DIGIT_GLYPHS, PIP_LAYOUTS } from '../data/icons.js';
 import { shade } from './palette.js';
+import { JUNK_BODIES } from './junk-sprites.js';
 
 const SIZE = 16;
 const EDGE = '#07060f';
@@ -63,16 +70,40 @@ function drawDigits(ctx, value) {
   }
 }
 
-/** The face canvas for `type` showing `value`. Cached; do not draw into it. */
-export function dieSprite(type, value) {
-  const cacheKey = type + '|' + value;
+/**
+ * The face canvas for `type` showing `value`. Cached; do not draw into it.
+ *
+ * `cap` is the highest face this particular die can still show, which only an
+ * AA BATTERY cares about — it is drawn with the charge it has left, so it has
+ * to be part of the key or every battery in the run would share one sprite.
+ */
+export function dieSprite(type, value, cap = 0) {
+  const def = DICE[type];
+  const wears = def.wearsOut ? cap : '';
+  const cacheKey = `${type}|${value}|${wears}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const def = DICE[type];
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
+
+  // A thing that is not a die draws itself, top to bottom.
+  const paintJunk = JUNK_BODIES[type];
+  if (paintJunk) {
+    paintJunk(ctx, {
+      value,
+      cap: cap || def.faces,
+      color: def.color,
+      light: shade(def.color, 0.5),
+      dark: shade(def.color, -0.38),
+      edge: EDGE,
+      digits: drawDigits,
+      SIZE,
+    });
+    cache.set(cacheKey, canvas);
+    return canvas;
+  }
 
   // How far each row is inset, which is what rounds the corners.
   const inset = y => Math.max(0, def.cut - y, def.cut - (SIZE - 1 - y));
@@ -120,6 +151,7 @@ export function whiteSprite(type) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
+  // Value 1 is enough: the silhouette is the same whatever it reads.
   ctx.drawImage(dieSprite(type, 1), 0, 0);
   ctx.globalCompositeOperation = 'source-in';
   ctx.fillStyle = '#fff';
@@ -136,10 +168,18 @@ export function dieIconURL(type) {
   const cached = iconURLs.get(type);
   if (cached) return cached;
 
-  // Show a face that reads well: five pips, or the die's top number. A die
-  // that mirrors has no face of its own, so it is shown as it plays: blank.
+  /*
+   * Show a face that reads well: five pips, or the die's top number.
+   *
+   * A die that mirrors has no face of its own, so it is shown as it plays:
+   * blank. And a die that cannot roll every number between 1 and its maximum
+   * says which face to show — a TOSSED COIN advertising a five would be
+   * advertising a result it has never once produced.
+   */
   const def = DICE[type];
-  const face = def.mirrors ? BLANK_FACE : (def.faces === 6 ? 5 : def.faces);
+  const face = def.mirrors
+    ? BLANK_FACE
+    : def.iconFace || (def.faces === 6 ? 5 : def.faces);
   const url = dieSprite(type, face).toDataURL();
   iconURLs.set(type, url);
   return url;

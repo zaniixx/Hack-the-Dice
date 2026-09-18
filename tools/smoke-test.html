@@ -46,7 +46,8 @@ import { CORPS, corpName, corpFor } from '../src/data/corps.js';
 import { ENEMY_SPRITES } from '../src/render/enemy-sprites.js';
 import { applyScoringValues, comboTags, isAbsorbed } from '../src/game/scoring.js';
 import { dieSprite, dieIconURL, BLANK_FACE } from '../src/render/die-sprites.js';
-import { DICE, mirrorSource } from '../src/data/dice.js';
+import { JUNK_BODIES } from '../src/render/junk-sprites.js';
+import { DICE, mirrorSource, faceCapFor } from '../src/data/dice.js';
 import { iconURL } from '../src/render/icon-sprites.js';
 import * as board from '../src/engine/dice-board.js';
 import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, difficultySummary } from '../src/data/difficulty.js';
@@ -108,7 +109,7 @@ try {
 
   check('catalog sizes',
     [idsOf(ItemKind.DIE).length, idsOf(ItemKind.ARTIFACT).length, idsOf(ItemKind.ABILITY).length],
-    [13, 19, 11]);
+    [19, 27, 15]);
 
   // Every tier up to the last has to have something in it, in all three
   // catalogs, or a server that unlocks a tier unlocks nothing.
@@ -131,6 +132,87 @@ try {
     Object.values(DICE).filter(d => d.retriggers).map(d => d.name), ['CHRONO DIE']);
   check('definitionOf', definitionOf({ kind: 'art', id: 'quantum' }).name, 'QUANTUM CORE');
   check('definitionOf unknown', definitionOf({ kind: 'nope', id: 'x' }), undefined);
+
+  /*
+   * Found junk.
+   *
+   * These are the items whose whole identity is that they do not roll 1..faces
+   * like everything else, so what is worth pinning is the range each one can
+   * actually produce — a TOSSED COIN that ever lands on 3 is not a coin.
+   */
+  const rolledRange = (id, samples = 600) => {
+    const def = DICE[id];
+    const seen = new Set();
+    seedRun('JUNK-' + id);
+    for (let i = 0; i < samples; i++) {
+      const die = { type: id, value: 0 };
+      seen.add(def.roll ? def.roll(die, def.faces, gameInt) : gameInt(1, def.faces));
+    }
+    return [...seen].sort((a, b) => a - b);
+  };
+
+  check('a tossed coin lands on 1 or 6 and nothing else', rolledRange('coin'), [1, 6]);
+  check('a loaded die never disappoints', rolledRange('loaded'), [4, 5, 6]);
+  check('a lego brick is a d4', rolledRange('lego'), [1, 2, 3, 4]);
+  check('gum can only ever go up', (() => {
+    const def = DICE.gum;
+    seedRun('GUM');
+    // A die already showing 5 cannot be rerolled down to a 2.
+    return [...Array(200)].every(() => def.roll({ type: 'gum', value: 5 }, 6, gameInt) >= 5);
+  })(), true);
+  check('a lego 1 is the roll that pays',
+    [DICE.lego.onScore({ scoringValue: 1 }).length, DICE.lego.onScore({ scoringValue: 4 }).length],
+    [1, 0]);
+  check('fuzzy dice are there for the Mult, not the Bits',
+    [!!DICE.fuzzy.noBits, DICE.fuzzy.onScore()[0].value], [true, 6]);
+
+  // A battery is the only die that wears, and it has to reach exactly zero.
+  check('a battery loses a face a node and then is nothing',
+    [0, 1, 5, 9, 10, 40].map(wear => faceCapFor('battery', wear)), [10, 9, 5, 1, 0, 0]);
+  check('nothing else wears at all',
+    [0, 50].map(wear => faceCapFor('d20', wear)), [20, 20]);
+
+  // And the junk artifacts, which are all arithmetic over the run.
+  const asRun = extra => ({ run: { scrap: 0, dice: [], node: 1, stacks: {}, ...extra }, scored: [] });
+  const paid = (id, ctx) => (ARTIFACTS[id].bonus(ctx)[0] || { value: 0 }).value;
+
+  check('the paperclip is +1 Mult and nothing else',
+    [paid('paperclip', asRun()), Object.keys(ARTIFACTS.paperclip).includes('perDie')], [1, false]);
+  check('the duck pays per reroll actually spent',
+    [0, 1, 3].map(spent => paid('duck', asRun({ rerollsSpent: spent }))), [0, 2, 6]);
+  check('tangled cables are worth nothing on the node you buy them',
+    [1, 2, 5].map(node => paid('cables', asRun({ node }))), [0, 4, 16]);
+  check('coffee goes cold and stops at nothing',
+    [0, 3, 8, 20].map(cold => paid('coffee', asRun({ stacks: { coffee: cold } }))), [8, 5, 0, 0]);
+  check('the energy drink stops paying after three nodes',
+    [0, 2, 3, 9].map(nodes =>
+      ARTIFACTS.energydrink.multiplier({ run: { stacks: { energydrink: nodes } } }).length),
+    [1, 1, 0, 0]);
+  check('and the floppy caps Bits somewhere a real pool can reach',
+    ARTIFACTS.floppy.capsBits < 600, true);
+
+  /*
+   * The junk draws itself.
+   *
+   * A coin drawn as a tinted cube is a cube, so these six bring their own
+   * 16x16. Two things can break quietly: one of them losing its painter and
+   * silently falling back to a cube, and the sprite cache forgetting that a
+   * battery's look depends on its charge — at which point every battery in the
+   * run shares one sprite and the charge bar never moves again.
+   */
+  const JUNK = ['coin', 'battery', 'lego', 'gum', 'loaded', 'fuzzy'];
+  check('every piece of junk paints itself rather than borrowing a cube',
+    JUNK.every(id => typeof JUNK_BODIES[id] === 'function'), true);
+  check('and nothing else does',
+    Object.keys(JUNK_BODIES).filter(id => !JUNK.includes(id)), []);
+  check('a battery at full charge is not the sprite of a flat one',
+    dieSprite('battery', 5, 10) !== dieSprite('battery', 5, 4), true);
+  check('but the same battery twice is the same sprite',
+    dieSprite('battery', 5, 10) === dieSprite('battery', 5, 10), true);
+  check('a die that cannot wear ignores the charge entirely',
+    dieSprite('d6', 5, 2) === dieSprite('d6', 5, 6), true);
+  check('the market never advertises a face a die cannot roll',
+    DICE.coin.iconFace, 6);
 
   check('nodeHP first node', nodeHP(1, 1), 40);
   check('nodeHP boss', nodeHP(1, 5), Math.round(40 * Math.pow(1.55, 4) * 2.2));

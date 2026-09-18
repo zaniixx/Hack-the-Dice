@@ -88,7 +88,9 @@ async function scoreDie(die, tally, index) {
   const def = DICE[die.type];
 
   executeView.highlightDie(die, index);
-  applyEffect(tally, bits(die.scoringValue), Source.die(die));
+  // FUZZY DICE roll a value that counts for pairs and straights and never
+  // reaches the Bits: they were only ever decorative.
+  if (!def.noBits) applyEffect(tally, bits(die.scoringValue), Source.die(die));
 
   for (const effect of def.onScore?.(die) || []) {
     await sleep(delay * 0.4);
@@ -202,8 +204,28 @@ async function scoreBoard(tally, enemy) {
   }
 }
 
+/**
+ * The lowest ceiling any artifact puts on Bits, or Infinity for no ceiling.
+ *
+ * Only the FLOPPY DISK has one. It is applied here rather than while the Bits
+ * are accumulating so the player watches the number climb and then get clamped,
+ * which is the moment the artifact is explaining itself.
+ */
+function bitsCeiling() {
+  return run.artifacts.reduce((lowest, id) => {
+    const cap = ARTIFACTS[id].capsBits;
+    return cap ? Math.min(lowest, cap) : lowest;
+  }, Infinity);
+}
+
 /** Land the payload on the firewall and record the damage. */
 async function landPayload(tally, enemy) {
+  const ceiling = bitsCeiling();
+  if (tally.bits > ceiling) {
+    log(`> ${fmt(tally.bits)} bits will not fit: capped at ${fmt(ceiling)}`, 'red');
+    tally.bits = ceiling;
+  }
+
   const total = Math.floor(tally.bits * tally.mult);
   executeView.showTotals(tally.bits, tally.mult, total);
 
@@ -296,6 +318,9 @@ async function resolveExecute() {
     firstExecute: run.firstExecute,
     killed: enemy.hp <= 0,
   });
+
+  // The coffee goes cold whether or not it did anything.
+  if (hasArtifact('coffee')) run.stacks.coffee = (run.stacks.coffee || 0) + 1;
 
   run.firstExecute = false;
   run.overdrive = 1;

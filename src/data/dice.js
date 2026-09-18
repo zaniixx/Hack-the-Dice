@@ -14,6 +14,11 @@
  *   lateMultiplier  ×Mult applied after flat bonuses, or null for none
  *   mirrors         scores the highest value among the other dice instead
  *   retriggers      scores a second time, paying every perDie artifact twice
+ *   roll(die, cap, gameInt)  what it lands on, when 1–faces is not the answer
+ *   noBits          scores no Bits at all — it is here for the Mult
+ *   wearsOut        loses a face per node, and is gone when it runs out
+ *   iconFace        the face to show in the market, for a die that cannot roll
+ *                   every number up to its maximum
  */
 import { mult } from './effects.js';
 
@@ -118,6 +123,82 @@ export const DICE = {
     cost: 48, tier: 4,
     desc: 'Rolls 1–50. Huge, and wildly unreliable.',
   },
+
+  // ---- Found junk ---------------------------------------------------------
+  // Things off a desk rather than out of a rig. They are cheap, they are
+  // strange, and most of them are worse than the hardware they sit next to in
+  // at least one way that matters — which is the point of buying them anyway.
+  coin: {
+    name: 'TOSSED COIN',
+    faces: 6, cut: 3, color: '#ffc23d',
+    cost: 6, tier: 1,
+    // Same average as a D6 and none of the middle: half its rolls are a 6,
+    // which is worth a great deal to OVERCLOCKER and nothing at all to
+    // anything counting a straight.
+    desc: 'Lands on 1 or 6. Nothing in between.',
+    roll: (die, cap, gameInt) => (gameInt(1, 2) === 1 ? 1 : 6),
+    iconFace: 6, // it has never rolled a five and should not advertise one
+  },
+  lego: {
+    name: 'LEGO BRICK',
+    faces: 4, cut: 1, color: '#ff4d6d',
+    cost: 4, tier: 1,
+    // The worst roll on the smallest die pays the most, which is exactly how
+    // it works on a dark landing. One roll in four, so +6 averages out near
+    // VIRUS's flat +3 — bought with the worst Bits on the board.
+    desc: 'Rolls 1–4. Adds +6 Mult when it rolls a 1.',
+    onScore: die => (die.scoringValue === 1 ? [mult(6)] : []),
+  },
+  battery: {
+    name: 'AA BATTERY',
+    faces: 10, cut: 2, color: '#b6ff3d',
+    cost: 7, tier: 1,
+    // Better than a D8 on the day you buy it and worthless ten nodes later.
+    // Deliberately not a D12 for less money: it is a head start, not a rig.
+    desc: 'Rolls 1–10, and loses a face every node. At zero it is spent.',
+    wearsOut: true,
+  },
+  gum: {
+    name: 'CHEWED GUM',
+    faces: 6, cut: 1, color: '#ff3df0',
+    cost: 10, tier: 2,
+    // Rerolling it can only help, which makes it the one die on the board that
+    // never punishes a reroll spent somewhere else — and worth nothing to a rig
+    // that never rerolls, which is why it is not priced like a D12.
+    desc: 'Rolls 1–6, and sticks: a reroll can only raise it.',
+    roll: (die, cap, gameInt) => Math.max(die.value || 0, gameInt(1, cap)),
+  },
+  loaded: {
+    name: 'LOADED DIE',
+    faces: 6, cut: 1, color: '#ffe23d',
+    cost: 12, tier: 2,
+    // Nobody asks where you got it. Fewer Bits than a D12 that costs more, and
+    // a floor that never once breaks KERNEL PANIC — the floor is the product.
+    desc: 'Rolls 4, 5 or 6. Never anything else.',
+    roll: (die, cap, gameInt) => gameInt(4, 6),
+  },
+  fuzzy: {
+    name: 'FUZZY DICE',
+    faces: 6, cut: 3, color: '#9a7bff',
+    cost: 22, tier: 3,
+    // They hang off a mirror. They were never for rolling. The value still
+    // counts for pairs and straights — it simply never reaches the Bits.
+    desc: 'Rolls 1–6 and scores no Bits. Adds +6 Mult when it scores.',
+    noBits: true,
+    onScore: () => [mult(6)],
+  },
+};
+
+/**
+ * The highest face a die of this type can currently show.
+ *
+ * Only worn-out dice care: an AA BATTERY at three nodes of wear is a d9, and at
+ * twelve it is nothing at all. Everything else ignores `wear` entirely.
+ */
+export const faceCapFor = (type, wear = 0) => {
+  const def = DICE[type];
+  if (!def) return 0;
+  return def.wearsOut ? Math.max(0, def.faces - wear) : def.faces;
 };
 
 /** The pool every run starts with. */

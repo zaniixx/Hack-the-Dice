@@ -18,11 +18,11 @@ import { difficultyOf } from '../data/difficulty.js';
 import { ABILITIES, isKnownAbility } from '../data/abilities.js';
 import { isKnownArtifact, artifactsStackingOn } from '../data/artifacts.js';
 import { isKnownEdition } from '../data/editions.js';
-import { isKnownDie, STARTING_DICE } from '../data/dice.js';
+import { DICE, isKnownDie, STARTING_DICE, faceCapFor } from '../data/dice.js';
 import { definitionOf } from '../data/catalog.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
-import { setDicePool } from '../engine/dice-board.js';
+import { setDicePool, resolveFaceCap } from '../engine/dice-board.js';
 import {
   resetEnemyView, markEnemyDestroyed, explodeEnemy,
 } from '../render/enemy-view.js';
@@ -69,6 +69,34 @@ function advanceStacks(event) {
 }
 
 /**
+ * Dice that do not last.
+ *
+ * An AA BATTERY loses a face every node and is thrown away when there is
+ * nothing left in it. The wear is counted once for the run rather than per
+ * battery, which is the honest simplification: a spare bought later came out of
+ * the same drawer as the first one.
+ */
+function wearDownDice() {
+  if (!run.dice.some(type => DICE[type].wearsOut)) return;
+
+  run.stacks.wear = (run.stacks.wear || 0) + 1;
+
+  const spent = run.dice.filter(type => faceCapOf(type) <= 0);
+  if (!spent.length) return;
+
+  run.dice = run.dice.filter(type => faceCapOf(type) > 0);
+  setDicePool(run.dice);
+  log(`> ${DICE[spent[0]].name.toLowerCase()}: nothing left in it`, 'red');
+}
+
+/** How worn a die of this type is right now, for the engine to roll within. */
+const faceCapOf = type => faceCapFor(type, run ? run.stacks.wear || 0 : 0);
+
+// The engine rolls dice and knows nothing about runs, so it is told where to
+// ask. Registered once, here, next to the rule it is asking about.
+resolveFaceCap(faceCapOf);
+
+/**
  * Build the target for the current server and node.
  *
  * Node 5 is guarded by a boss protocol — unless a tournament banned every one
@@ -76,7 +104,11 @@ function advanceStacks(event) {
  */
 function createEnemy() {
   const bossKey = run.node === BOSS_NODE ? bossForNode(run.server, run.seed) : null;
-  const max = firewallHP(run.server, run.node);
+
+  // Somebody left the password on the monitor. Still the most realistic hack
+  // in this game, and it only ever works on the way in.
+  const shortcut = hasArtifact('stickynote') && run.node === 1 ? 0.5 : 1;
+  const max = Math.max(1, Math.round(firewallHP(run.server, run.node) * shortcut));
 
   return {
     name: bossKey ? BOSSES[bossKey].name : gamePick(corpFor(run.server).nodes),
@@ -92,7 +124,17 @@ function createEnemy() {
 export function beginNode() {
   run.enemy = createEnemy();
 
-  run.executes = executesPerNode() + (hasArtifact('ghost') ? 1 : 0);
+  /*
+   * Executes, after everything that argues about them.
+   *
+   * GHOST PROTOCOL adds one. A MECHANICAL KEYBOARD takes one, because they can
+   * hear you. An ENERGY DRINK takes one too, but only once its three good nodes
+   * are behind it. Never below one, or the node could not be played at all.
+   */
+  run.executes = Math.max(1, executesPerNode()
+    + (hasArtifact('ghost') ? 1 : 0)
+    - (hasArtifact('keyboard') ? 1 : 0)
+    - (hasArtifact('energydrink') && (run.stacks.energydrink || 0) >= 3 ? 1 : 0));
   run.maxExecutes = run.executes;
   run.rerolls = 0;
   run.charges = {};
@@ -156,6 +198,7 @@ export async function breachNode() {
 
   run.stats.nodes++;
   advanceStacks('breach');
+  wearDownDice();
 
   const wasBoss = !!run.enemy.boss;
   log(`> ${run.enemy.name} breached`, 'lime');

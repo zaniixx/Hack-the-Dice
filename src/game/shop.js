@@ -21,7 +21,7 @@ import { setDicePool } from '../engine/dice-board.js';
 import { log } from '../ui/log.js';
 import { toast } from '../ui/fx.js';
 import { updateUI, shopRefreshCost } from '../ui/hud.js';
-import { run, Phase } from './state.js';
+import { run, Phase, hasArtifact } from './state.js';
 import { priceOf, sellValueOf, artifactSlots } from './difficulty.js';
 import { isAllowed } from './tournament.js';
 import { discoverOffers, discover } from './archive.js';
@@ -146,6 +146,11 @@ export function buyItem(index) {
 
   run.scrap -= price;
   item.sold = true;
+
+  // You went to the machine. The coffee is hot again, which is the only reason
+  // anything in this rig rewards you for spending rather than hoarding.
+  if (hasArtifact('coffee')) run.stacks.coffee = 0;
+
   sfx.coin();
   const stamp = EDITIONS[item.edition];
   log(`> installed ${stamp ? stamp.name + ' ' : ''}${def.name}`, 'cyan');

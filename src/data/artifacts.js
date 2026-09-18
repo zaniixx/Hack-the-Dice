@@ -152,6 +152,90 @@ export const ARTIFACTS = {
     multiplier: ctx => [xMult(2 * Math.pow(MOORE_GROWTH, ctx.run.stacks.moore || 0))],
     stack: run => '×' + fmt(2 * Math.pow(MOORE_GROWTH, run.stacks.moore || 0)),
   },
+
+  // ---- Found junk ---------------------------------------------------------
+  // Things off a desk. They are priced as junk because most of them are, and
+  // the three that are not all charge you something the others do not.
+  paperclip: {
+    name: 'PAPERCLIP', tier: 1, cost: 1, color: '#c9d1ff',
+    // The cheapest thing in the market, and still a bad buy: the slot it takes
+    // is worth more than the +1. Everybody buys it once.
+    desc: '+1 Mult. That is the whole artifact.',
+    bonus: () => [mult(1)],
+  },
+  duck: {
+    name: 'RUBBER DUCK', tier: 1, cost: 7, color: '#ffe23d',
+    // The only thing in the game that pays you for rerolling, which puts it
+    // exactly opposite ZERO DAY. Owning both is a decision, not a build.
+    desc: '+2 Mult for every reroll you have spent this Execute.',
+    bonus: ctx => {
+      const spent = ctx.run.rerollsSpent || 0;
+      return spent ? [mult(2 * spent)] : [];
+    },
+  },
+  stickynote: {
+    name: 'STICKY NOTE', tier: 1, cost: 7, color: '#ffc23d',
+    desc: 'The first node of every server starts at half firewall.',
+    passive: true, // see game/session.js, createEnemy()
+  },
+  coffee: {
+    name: 'COLD COFFEE', tier: 2, cost: 10, color: '#ff7a5a',
+    // Drains inside a node and is refilled by spending, which makes hoarding
+    // scrap cost you something for once.
+    desc: '+8 Mult, losing 1 every Execute. Buying anything fills it back up.',
+    bonus: ctx => {
+      const left = Math.max(0, 8 - (ctx.run.stacks.coffee || 0));
+      return left ? [mult(left)] : [];
+    },
+    stack: run => '+' + Math.max(0, 8 - (run.stacks.coffee || 0)),
+  },
+  cables: {
+    name: 'TANGLED CABLES', tier: 2, cost: 11, color: '#7dffb0',
+    // Worth nothing on the node you buy it and the most on the one with the
+    // boss behind it.
+    desc: '+4 Mult for every node past the first on this server.',
+    bonus: ctx => {
+      const untangled = Math.max(0, ctx.run.node - 1);
+      return untangled ? [mult(4 * untangled)] : [];
+    },
+  },
+  keyboard: {
+    name: 'MECHANICAL KEYBOARD', tier: 2, cost: 12, color: '#3df2ff',
+    // Blues, in an open-plan office. They hear you coming.
+    desc: '+2 Mult for every scoring die. −1 Execute on every node.',
+    perDie: () => [mult(2)],
+    // The execute is taken in game/session.js, beginNode().
+  },
+  energydrink: {
+    name: 'ENERGY DRINK', tier: 2, cost: 13, color: '#b6ff3d',
+    // Three nodes of being the best artifact in the rig, and then the rest of
+    // the server paying for it. The crash is not optional.
+    desc: '×3 Mult for three nodes. Then −1 Execute for the rest of the server.',
+    stacksOn: 'breach',
+    multiplier: ctx => ((ctx.run.stacks.energydrink || 0) < 3 ? [xMult(3)] : []),
+    stack: run => ((run.stacks.energydrink || 0) < 3
+      ? `${3 - (run.stacks.energydrink || 0)} left`
+      : 'crashed'),
+  },
+  floppy: {
+    name: 'FLOPPY DISK', tier: 3, cost: 14, color: '#9a7bff',
+    /*
+     * The trap, and the only artifact here that is meant to be sold.
+     *
+     * Cheaper than QUANTUM CORE and strictly better than it for about two
+     * servers, because a starting pool never comes near 144 Bits. Somewhere
+     * around server three it starts clipping every Execute, and from then on
+     * the ×3 is buying back less than the ceiling is taking. Knowing when it
+     * turned is the whole item.
+     *
+     * The number is 144 rather than 1,440 because 1,440 is unreachable — the
+     * best pool in the game tops out near 600 — and a ceiling nothing ever
+     * touches is not a drawback, it is a lie in the tooltip.
+     */
+    desc: '×3 Mult. A 1.44MB disk holds what it holds: your Bits cannot exceed 144.',
+    multiplier: () => [xMult(3)],
+    capsBits: 144, // applied in game/execute.js, before the firewall is hit
+  },
 };
 
 export const isKnownArtifact = id => Object.hasOwn(ARTIFACTS, id);

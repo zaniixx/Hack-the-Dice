@@ -5,7 +5,7 @@
  * pixel is 2 or 3 real pixels and nothing is ever interpolated. The circuit
  * trace background is generated once per size into an offscreen canvas.
  */
-import { board, dice, particles, camera, resizeBoard } from '../engine/dice-board.js';
+import { board, dice, particles, camera, resizeBoard, faceCap } from '../engine/dice-board.js';
 import { rand, randInt } from '../core/random.js';
 import { DICE, mirrorSource } from '../data/dice.js';
 import { dieSprite, whiteSprite, BLANK_FACE } from './die-sprites.js';
@@ -281,7 +281,8 @@ export function drawBoard(dt, { isDoomed = null } = {}) {
     ctx.translate(Math.round(die.x), Math.round(screenY));
     ctx.rotate(die.angle);
     if (drawScale !== 1) ctx.scale(drawScale, drawScale);
-    ctx.drawImage(dieSprite(die.type, faceOf(die)), -8, -8);
+    // faceCap so a worn battery is drawn with the charge it has left.
+    ctx.drawImage(dieSprite(die.type, faceOf(die), faceCap(die)), -8, -8);
     if (die.flash > 0 || pulse > 0) {
       ctx.globalAlpha = Math.min(1, Math.max(die.flash, pulse * 0.85));
       ctx.drawImage(whiteSprite(die.type), -8, -8);

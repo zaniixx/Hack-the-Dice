@@ -8,7 +8,7 @@ import { ABILITIES } from '../data/abilities.js';
 import { rerollsPerRoll } from './difficulty.js';
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
-import { dice, throwDice, unlockAll, popDie } from '../engine/dice-board.js';
+import { dice, throwDice, unlockAll, popDie, setDicePool } from '../engine/dice-board.js';
 import { log } from '../ui/log.js';
 import { toast } from '../ui/fx.js';
 import { updateUI, resetScoreboard, showScorePreview } from '../ui/hud.js';
@@ -22,6 +22,7 @@ export function rollDice() {
   initAudio(); // the player just interacted: it is safe to start audio
 
   run.rerolls = rerollsPerRoll();
+  run.rerollsSpent = 0; // RUBBER DUCK pays per reroll, counted per Execute
   run.overdrive = 1;
   run.overdriveLabel = '';
   run.rolledOnce = true;
@@ -50,6 +51,7 @@ export function rerollDice() {
   }
 
   run.rerolls--;
+  run.rerollsSpent = (run.rerollsSpent || 0) + 1;
   // A reroll clears quarantine; ANTIVIRUS will pick a new victim on landing.
   for (const die of dice) die.quarantined = false;
 
@@ -106,6 +108,25 @@ export function useAbility(id) {
   if (cancelled) {
     sfx.buzz();
     return;
+  }
+
+  /*
+   * Two of the junk abilities need the board rebuilt under them, which is not
+   * something an ability can reach from data/. They say so by leaving a note on
+   * the run, and this is where it is picked up.
+   */
+  if (run.hitIt) {
+    run.hitIt = false;
+    setDicePool(run.dice);      // one die fell off
+    unlockAll();
+    throwDice(dice, { fullThrow: false });
+    run.phase = Phase.ROLLING;
+  }
+  if (run.rebooted) {
+    run.rebooted = false;
+    run.rerolls = rerollsPerRoll();
+    run.firstExecute = true;    // the node genuinely starts over
+    resetScoreboard();
   }
 
   run.charges[id]--;

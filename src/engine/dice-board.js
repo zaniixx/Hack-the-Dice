@@ -110,11 +110,46 @@ export function layoutTray() {
  * A full throw arcs up the board from the tray; a reroll is a shorter toss in
  * place, so locked dice stay visually where the player left them.
  */
+/**
+ * The highest face this particular die can show.
+ *
+ * Normally the catalog's answer, but a die can be worn down — an AA BATTERY
+ * loses a face every node it survives. The engine has no idea why that happens
+ * and no business knowing, so the game hands it a resolver at startup and this
+ * asks. With nobody registered it is simply the catalog, which is what every
+ * test page and every die but one wants.
+ */
+let wearOf = null;
+
+/** Called once by the composition root. See game/session.js for the rule. */
+export const resolveFaceCap = resolver => { wearOf = resolver; };
+
+export const faceCap = die => {
+  const worn = wearOf ? wearOf(die.type) : null;
+  return Number.isFinite(worn) ? worn : DICE[die.type].faces;
+};
+
+/**
+ * What a die lands on.
+ *
+ * A die type may bring its own `roll`, which is how a TOSSED COIN manages to
+ * be a coin and a LOADED DIE manages to never disappoint. It is handed the die
+ * — including the value it was already showing, which is what lets CHEWED GUM
+ * ratchet upwards instead of starting over. Everything here stays on the
+ * seeded stream, so a seed still replays exactly.
+ */
+function rollValue(die) {
+  const def = DICE[die.type];
+  const cap = faceCap(die);
+  const rolled = def.roll ? def.roll(die, cap, gameInt) : gameInt(1, cap);
+  return Math.max(1, Math.min(cap, Math.round(rolled)));
+}
+
 export function throwDice(list, { fullThrow }) {
   for (const die of list) {
     // The face is seeded; everything below it — the arc, the spin, the
     // tumbling faces on the way down — is cosmetic and stays unseeded.
-    die.value = gameInt(1, DICE[die.type].faces);
+    die.value = rollValue(die);
     die.settled = false;
     die.flickerTimer = 0;
     die.quarantined = false;
@@ -319,7 +354,7 @@ function stepDie(die, dt) {
     die.flickerTimer -= dt;
     if (die.flickerTimer <= 0) {
       die.flickerTimer = 0.06 + Math.random() * 0.04;
-      die.shownValue = !grounded || speed > 30 ? randInt(1, faces) : die.value;
+      die.shownValue = !grounded || speed > 30 ? randInt(1, Math.min(faces, faceCap(die))) : die.value;
     }
     return;
   }
