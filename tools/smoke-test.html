@@ -81,7 +81,7 @@ import { buildLabel } from '../src/services/build-info.js';
 import { moodFor, intensityFor } from '../src/game/soundtrack.js';
 import {
   planBar, progressionOf, layersAt, frequencyOf, renderBars,
-  setIntensity, currentIntensity, setMood, isPlaying, MOOD_NAMES,
+  setIntensity, currentIntensity, setMood, isPlaying, scheduleWindow, MOOD_NAMES,
 } from '../src/audio/music.js';
 import { sfx } from '../src/audio/sfx.js';
 import { initAudio, setMuted } from '../src/audio/synth.js';
@@ -1330,6 +1330,39 @@ try {
    * thing that syncs the soundtrack returns early when there is no run and is
    * not called on the way back to the title anyway.
    */
+  /*
+   * A stalled sequencer skips; it does not catch up.
+   *
+   * The timer writes a fraction of a second ahead of the audio clock. When the
+   * main thread stalls — and starting a run stalls it, building a board, a pool
+   * and a target at once — it comes back to find the step it meant to write is
+   * already in the past. Catching up puts every missed step at the only time
+   * left, which is now, so a half-second hitch fires four of them at the same
+   * instant: a pad, bass, a kick and a fistful of melody from four different
+   * parts of the bar, together. That is what "two tracks at once" was.
+   *
+   * A sixteenth at 112bpm is 0.134s, and the window looks 0.12s ahead, so a
+   * healthy tick has one step in it and a stalled one must not have more.
+   */
+  const STEP_112 = 60 / 112 / 4;
+
+  check('a healthy tick schedules one step, where it belongs',
+    scheduleWindow(10.05, 10, STEP_112).delays.map(d => d.toFixed(3)), ['0.050']);
+
+  check('a stalled tick skips the missed steps instead of stacking them', (() => {
+    const half = scheduleWindow(9.5, 10, STEP_112).delays;
+    const awful = scheduleWindow(6, 10, STEP_112).delays;
+    return [half.length, awful.length, half.every(d => d > 0), awful.every(d => d > 0)];
+  })(), [1, 1, true, true]);
+
+  // The property that matters, stated as itself: however far behind it gets,
+  // it can never put two steps on the same instant.
+  check('no stall can ever land two steps together',
+    [0.2, 0.5, 1, 4, 30, 600].every(stall => {
+      const { delays } = scheduleWindow(10 - stall, 10, STEP_112);
+      return new Set(delays).size === delays.length;
+    }), true);
+
   check('asking for a mood after silence starts the music again', (() => {
     setMood('node');
     setMood('silence');

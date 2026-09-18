@@ -356,19 +356,57 @@ function crossBarLine() {
   }
 }
 
+/** How far past the clock a resync lands, when one is needed. */
+const RESYNC = 0.02;
+
+/**
+ * Which steps to fire now, and when the one after them is due.
+ *
+ * The sequencer runs on a timer and writes a fraction of a second ahead of the
+ * audio clock. When the main thread stalls — and starting a run stalls it, with
+ * a board, a pool and a target all being built at once — the timer comes back
+ * late and the step it was going to write is already in the past.
+ *
+ * Catching up from there is the bug this exists to stop. Every missed step
+ * still has to be written somewhere, and the only place left is now, so a
+ * half-second hitch fires four steps at the same instant: a pad, two bass
+ * notes, a kick and a handful of melody all landing on top of each other, out
+ * of different parts of the bar. It reads exactly as what it is, which is two
+ * pieces of music playing at once.
+ *
+ * So a sequencer that has fallen behind skips rather than catches up. The
+ * missed steps are gone; what comes out is a small gap, which nobody hears,
+ * instead of a cluster, which everybody does.
+ *
+ * Pure, and exported, because the arithmetic is the whole fix.
+ *
+ * @returns {{delays: number[], next: number}} delays in seconds from `now`
+ */
+export function scheduleWindow(scheduled, now, stepLength, ahead = SCHEDULE_AHEAD) {
+  let at = scheduled < now ? now + RESYNC : scheduled;
+  const delays = [];
+
+  while (at < now + ahead) {
+    delays.push(Math.max(0, at - now));
+    at += stepLength;
+  }
+  return { delays, next: at };
+}
+
 function schedule() {
   if (!audioReady()) return;
 
   const now = audioTime();
   if (!nextStepTime) nextStepTime = now + 0.08;
 
-  while (nextStepTime < now + SCHEDULE_AHEAD) {
-    playStep(step, Math.max(0, nextStepTime - now));
+  const { delays, next } = scheduleWindow(nextStepTime, now, stepDuration());
+  for (const delay of delays) {
+    playStep(step, delay);
 
     step += 1;
     if (step >= STEPS_PER_BAR) crossBarLine();
-    nextStepTime += stepDuration();
   }
+  nextStepTime = next;
 }
 
 /**
