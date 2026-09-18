@@ -32,6 +32,7 @@ import { MEMORY_LEAK_RATE } from '../data/rules.js';
 import { sfx } from '../audio/sfx.js';
 import { dice, unlockAll } from '../engine/dice-board.js';
 import { flashEnemyHit } from '../render/enemy-view.js';
+import { contributes, paysBits } from './scoring.js';
 import { log } from '../ui/log.js';
 import { shakeApp } from '../ui/fx.js';
 import { updateUI, updateFirewall, resetScoreboard } from '../ui/hud.js';
@@ -88,9 +89,12 @@ async function scoreDie(die, tally, index) {
   const def = DICE[die.type];
 
   executeView.highlightDie(die, index);
-  // FUZZY DICE roll a value that counts for pairs and straights and never
-  // reaches the Bits: they were only ever decorative.
-  if (!def.noBits) applyEffect(tally, bits(die.scoringValue), Source.die(die));
+
+  // Artifacts pay out for a die that scored; see contributes() for where that
+  // line falls and why a silent LEGO BRICK is on the wrong side of it.
+  const paying = contributes(def, die);
+
+  if (paysBits(def, die)) applyEffect(tally, bits(die.scoringValue), Source.die(die));
 
   for (const effect of def.onScore?.(die) || []) {
     await sleep(delay * 0.4);
@@ -101,13 +105,15 @@ async function scoreDie(die, tally, index) {
   const late = def.lateMultiplier?.(die);
   if (late) tally.lateMultipliers.push({ die, value: late });
 
-  for (const id of run.artifacts) {
-    const artifact = ARTIFACTS[id];
-    if (!artifact.perDie) continue;
-    for (const effect of artifact.perDie(tally, die)) {
-      await sleep(delay * 0.45);
-      executeView.pulseArtifact(id);
-      applyEffect(tally, effect, Source.artifact(id));
+  if (paying) {
+    for (const id of run.artifacts) {
+      const artifact = ARTIFACTS[id];
+      if (!artifact.perDie) continue;
+      for (const effect of artifact.perDie(tally, die)) {
+        await sleep(delay * 0.45);
+        executeView.pulseArtifact(id);
+        applyEffect(tally, effect, Source.artifact(id));
+      }
     }
   }
 

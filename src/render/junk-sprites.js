@@ -108,40 +108,132 @@ function paintBattery(ctx, { value, cap, color, light, dark, edge, digits }) {
 }
 
 /**
- * LEGO BRICK — a 2x2 brick, studs up.
- *
- * It rolls 1 to 4 and it has four pegs, so the value is how many are lit. An
- * unlit peg is not drawn dim, it is not drawn at all: at this size a dim peg
- * and a lit one are the same peg, and then the die has no readable value.
+ * A stud seen from the side: a short cylinder standing on top of the brick.
  */
-function paintLego(ctx, { value, color, light, dark, edge }) {
-  // Studs on top.
+const studSide = (ctx, x, y, { light, edge }) => {
   ctx.fillStyle = edge;
-  row(ctx, 3, 0, 4, 3);
-  row(ctx, 9, 0, 4, 3);
+  row(ctx, x, y, 4, 3);
   ctx.fillStyle = light;
-  row(ctx, 4, 1, 2, 1);
-  row(ctx, 10, 1, 2, 1);
+  row(ctx, x + 1, y + 1, 2, 1);
+};
 
-  // Body.
+/**
+ * A stud seen from above: a ring, lit on top and shadowed underneath.
+ *
+ * Four pixels across is the smallest a stud can be and still read as round
+ * rather than as a square pip, which matters on the one face where four of them
+ * are the whole point.
+ */
+const studTop = (ctx, x, y, { light, dark, edge }) => {
   ctx.fillStyle = edge;
-  row(ctx, 1, 3, 14, 12);
-  ctx.fillStyle = color;
-  row(ctx, 2, 4, 12, 10);
+  row(ctx, x + 1, y, 2, 1);
+  row(ctx, x, y + 1, 4, 2);
+  row(ctx, x + 1, y + 3, 2, 1);
   ctx.fillStyle = light;
-  row(ctx, 2, 4, 12, 1);
+  row(ctx, x + 1, y + 1, 2, 1);
   ctx.fillStyle = dark;
-  row(ctx, 2, 13, 12, 1);
+  row(ctx, x + 1, y + 2, 2, 1);
+};
 
-  // Pegs, lit up to the value and simply absent past it.
-  const pegs = [[4, 6], [9, 6], [4, 10], [9, 10]];
-  for (let i = 0; i < Math.min(value, 4); i++) {
-    const [x, y] = pegs[i];
+/** The brick's body: an outlined block, lit along the top, shadowed below. */
+const block = (ctx, x, y, w, h, { color, light, dark, edge }) => {
+  ctx.fillStyle = edge;
+  row(ctx, x - 1, y - 1, w + 2, h + 2);
+  ctx.fillStyle = color;
+  row(ctx, x, y, w, h);
+  ctx.fillStyle = light;
+  row(ctx, x, y, w, 1);
+  ctx.fillStyle = dark;
+  row(ctx, x, y + h - 1, w, 1);
+};
+
+/**
+ * LEGO BRICK — a 2x2 brick, and the way it happened to land.
+ *
+ * Every other die in the pool shows a number. A brick does not have numbers on
+ * it; it has studs, and which of them you can see is decided by which way up it
+ * came to rest. So that is the face: four landings, drawn as four different
+ * silhouettes, and the studs you can count are the value.
+ *
+ *   1  on its end, one stud showing        a narrow tower
+ *   2  on its side, studs pointing right   low and wide, bumps off one edge
+ *   3  tipped up on an edge, three showing the fourth stud hidden behind
+ *   4  flat, studs up, all four            seen from above, and the one that pays
+ *
+ * The count and the landing agree on purpose. A player who has seen the brick
+ * land studs up does not have to be told it was a four, and does not have to
+ * remember that a four is the roll with the Mult on it — the reason is on the
+ * face, which is the only way a rule like this is worth having.
+ */
+function paintLego(ctx, palette) {
+  const { value, color, light, dark, edge } = palette;
+
+  if (value <= 1) {
+    /*
+     * Upside down: it landed on its studs and you are looking at the underside.
+     *
+     * Drawn tall and narrow first, and it came out as a battery — which is a
+     * real problem when there is an actual AA battery in the pool. Wide and low
+     * with the hollow underside showing is unmistakably a brick, and one stud
+     * peeking over the back edge says which way up without a word.
+     */
+    studSide(ctx, 6, 1, palette);
+    block(ctx, 1, 4, 13, 10, palette);
+    ctx.fillStyle = dark;
+    row(ctx, 3, 6, 9, 7);
     ctx.fillStyle = edge;
-    row(ctx, x - 1, y - 1, 5, 4);
-    ctx.fillStyle = light;
-    row(ctx, x, y, 3, 2);
+    row(ctx, 6, 8, 3, 3);
+    return;
   }
+
+  if (value === 2) {
+    // On its side, studs pointing right, the way a brick usually settles. The
+    // studs are drawn the full height of the wall they are on, because two
+    // small tabs off the edge read as damage rather than as studs.
+    block(ctx, 1, 4, 10, 10, palette);
+    ctx.fillStyle = edge;
+    row(ctx, 11, 4, 4, 4);
+    row(ctx, 11, 10, 4, 4);
+    ctx.fillStyle = light;
+    row(ctx, 11, 5, 3, 1);
+    row(ctx, 11, 11, 3, 1);
+    // The seam along the middle of the wall, so it is a brick lying down and
+    // not a plain block with two lugs on it.
+    ctx.fillStyle = dark;
+    row(ctx, 2, 9, 9, 1);
+    return;
+  }
+
+  if (value === 3) {
+    /*
+     * Tipped up on an edge: two studs near, one behind, the fourth out of
+     * sight. The back one sits between the front two and overlaps them, which
+     * is what makes it read as further away — spaced evenly across the top it
+     * looked like a stud floating above the brick.
+     */
+    studSide(ctx, 6, 2, palette);
+    studSide(ctx, 2, 5, palette);
+    studSide(ctx, 10, 5, palette);
+    block(ctx, 2, 8, 12, 6, palette);
+    return;
+  }
+
+  /*
+   * Flat, studs up, seen from above — all four studs, and the Mult.
+   *
+   * It is the only face drawn from overhead, which is what makes it obvious
+   * across a board at a glance: three silhouettes are brick-shaped and this one
+   * is a square with four circles in it. The face that pays should be the face
+   * you can pick out without counting.
+   */
+  block(ctx, 1, 1, 14, 14, palette);
+  ctx.fillStyle = dark;
+  row(ctx, 1, 8, 14, 1);
+  row(ctx, 8, 1, 1, 14);
+  studTop(ctx, 3, 3, palette);
+  studTop(ctx, 10, 3, palette);
+  studTop(ctx, 3, 10, palette);
+  studTop(ctx, 10, 10, palette);
 }
 
 /**

@@ -48,7 +48,7 @@ import { EDITIONS, isKnownEdition, editionChance, slotsFrom } from '../src/data/
 import { BOSSES, BOSS_ORDER, bossForServer, bossOrderFor } from '../src/data/bosses.js';
 import { CORPS, corpName, corpFor } from '../src/data/corps.js';
 import { ENEMY_SPRITES } from '../src/render/enemy-sprites.js';
-import { applyScoringValues, comboTags, isAbsorbed } from '../src/game/scoring.js';
+import { applyScoringValues, comboTags, contributes, isAbsorbed, paysBits } from '../src/game/scoring.js';
 import { dieSprite, dieIconURL, BLANK_FACE } from '../src/render/die-sprites.js';
 import { JUNK_BODIES } from '../src/render/junk-sprites.js';
 import { DICE, mirrorSource, faceCapFor } from '../src/data/dice.js';
@@ -130,6 +130,218 @@ try {
       const above = Object.values(DICE).filter(d => d.tier === tier + 1).map(d => d.cost);
       return Math.max(...below) < Math.max(...above);
     }), true);
+  /*
+   * Every artifact, checked against the contract at the top of its catalog.
+   *
+   * The same argument as the dice audit: the market text is the only
+   * explanation a player is ever given, and an artifact that does not do what
+   * its line says is a lie told at the point of sale. What can be checked
+   * mechanically is different here, though, because an artifact is a hook
+   * rather than a number — so this asks two things of every one of them.
+   *
+   * First the structural contract: `passive` is defined at the top of the
+   * catalog as "no scoring hook", so the two have to agree in both directions,
+   * and an artifact that grows has to carry something to render the growth.
+   *
+   * Then the part that matters: every hook is offered a spread of plausible
+   * game states and has to pay out in at least one of them. A hook that can
+   * never fire is an artifact that does nothing for its price, which is exactly
+   * what FLOPPY DISK was while its ceiling sat at a number no pool could reach.
+   */
+  const artifactProbe = values => ({
+    scored: values.map(value => ({ scoringValue: value, type: 'd6' })),
+    firstExecute: true,
+    run: {
+      scrap: 10,
+      dice: ['d6', 'd6', 'd6', 'd6', 'd6'],
+      rerolls: 2,
+      rerollsSpent: 2,
+      node: 3,
+      server: 3,
+      stacks: { blockchain: 2, moore: 1, coffee: 0, energydrink: 0 },
+    },
+  });
+
+  // Two boards, because no single one satisfies every artifact at once: the
+  // first is a pair with everything at 4 or higher, the second is a straight.
+  const PROBES = [artifactProbe([5, 5, 6, 4]), artifactProbe([3, 4, 5, 6])];
+
+  const hooksOf = def => ['perDie', 'bonus', 'multiplier'].filter(hook => def[hook]);
+
+  /** Does this artifact ever pay out, on either of the boards above? */
+  const everFires = def => PROBES.some(ctx => hooksOf(def).some(hook => (hook === 'perDie'
+    ? ctx.scored.some(die => def.perDie(ctx, die).length)
+    : def[hook](ctx).length)));
+
+  const brokenArtifacts = Object.entries(ARTIFACTS).filter(([, def]) => {
+    const hooks = hooksOf(def);
+
+    // The catalog's own definition of passive, held to in both directions.
+    if (def.passive && hooks.length) return true;
+    if (!def.passive && !hooks.length) return true;
+
+    /*
+     * Something that grows on a breach or a migration needs a way to show what
+     * it has grown to. Only that direction: a `stack` readout does not imply a
+     * `stacksOn`, because COLD COFFEE counts Executes instead, and the first
+     * version of this check flagged it for that.
+     */
+    if (def.stacksOn && !def.stack) return true;
+
+    // A drawback the player is not told about is worse than no drawback.
+    if (def.capsBits && !String(def.desc).includes(String(def.capsBits))) return true;
+
+    // And every hook has to be reachable.
+    return hooks.length > 0 && !everFires(def);
+  }).map(([id]) => id);
+
+  check('every artifact is wired up and can actually pay out', brokenArtifacts, []);
+
+  /*
+   * A passive artifact has no hook, so nothing in the catalog can show it does
+   * anything at all — the code that honours it lives in the game layer. The one
+   * thing checkable from here is that such code exists: an id appearing nowhere
+   * outside its own catalog entry is an artifact the player can buy and that
+   * the rest of the game has never heard of.
+   */
+  const gameSource = (await Promise.all([
+    '/src/game/session.js',
+    '/src/game/execute.js',
+    '/src/game/turn.js',
+    '/src/game/memory-leak.js',
+    '/src/game/shop.js',
+  ].map(path => fetch(path).then(response => response.text())))).join('\n');
+
+  check('every passive artifact is honoured somewhere in the game layer',
+    Object.entries(ARTIFACTS)
+      .filter(([id, def]) => def.passive && !gameSource.includes("'" + id + "'"))
+      .map(([id]) => id),
+    []);
+
+  /*
+   * The same question for the counters. An artifact showing a running total has
+   * to have something incrementing it: either `stacksOn`, which the generic
+   * loop in session.js drives, or its own line in the game layer the way COLD
+   * COFFEE is counted down on every Execute. A readout nothing advances would
+   * sit at its starting value for the whole run.
+   */
+  check('every artifact that shows a running total has something driving it',
+    Object.entries(ARTIFACTS)
+      .filter(([id, def]) => def.stack && !def.stacksOn
+        && !gameSource.includes('stacks.' + id))
+      .map(([id]) => id),
+    []);
+
+  /*
+   * Every ability, fired at a real board.
+   *
+   * An ability is a mutation rather than a number, so the only honest way to
+   * check one is to run it and look at what moved. The rule comes out of the
+   * catalog's own contract — "returns false to cancel: a cancelled ability
+   * costs no charge" — and it catches the failure that actually matters, which
+   * is an ability that takes a charge and does nothing with it.
+   */
+  const abilityBoard = () => {
+    const dice = [
+      { type: 'd6', value: 2, locked: false },
+      { type: 'd6', value: 5, locked: false },
+      { type: 'd8', value: 3, locked: false },
+    ];
+    const run = {
+      dice: ['d6', 'd6', 'd8', 'd6', 'd6'],
+      rerolls: 1,
+      rerollsSpent: 0,
+      executes: 2,
+      maxExecutes: 3,
+      scrap: 4,
+      node: 3,
+      server: 2,
+      stacks: {},
+      overdrive: 0,
+      overdriveLabel: '',
+      enemy: { hp: 50, max: 100 },
+    };
+    let popped = 0;
+    return {
+      dice,
+      run,
+      log() {},
+      notify() {},
+      popDie() { popped++; },
+      get popped() { return popped; },
+    };
+  };
+
+  const snapshot = ctx => JSON.stringify([
+    ctx.dice.map(die => die.value), ctx.run.rerolls, ctx.run.executes,
+    ctx.run.scrap, ctx.run.overdrive, ctx.run.dice.length,
+    ctx.run.enemy.hp, !!ctx.run.rebooted, !!ctx.run.hitIt,
+  ]);
+
+  const idleAbilities = Object.entries(ABILITIES).filter(([id, def]) => {
+    const ctx = abilityBoard();
+    seedRun('ABILITY-' + id);
+    const before = snapshot(ctx);
+    const cancelled = def.use(ctx) === false;
+    // Either it declined the job or it did one. Silence is the bug: BLOW ON THE
+    // CARTRIDGE can reroll a die onto the face it was already showing, so a
+    // die that was touched counts even when no number changed.
+    return !cancelled && before === snapshot(ctx) && ctx.popped === 0;
+  }).map(([id]) => id);
+
+  check('every ability either does something or cancels', idleAbilities, []);
+
+  /*
+   * And where an ability states an amount, the amount is checked against what
+   * it actually moved. These four phrasings cover most of the catalog; the rest
+   * describe a shape rather than a number and are covered by the run above.
+   */
+  const REROLLS = /\+(\d+) rerolls?/;
+  const EXECUTES = /\+(\d+) Executes?/;
+  const SHIFT = /\+(\d+) to every unlocked die/;
+  const POWER = /deals ×(\d+)/;
+
+  const wrongAbilities = Object.entries(ABILITIES).filter(([id, def]) => {
+    const ctx = abilityBoard();
+    seedRun('ABILITY-CLAIM-' + id);
+    const values = ctx.dice.map(die => die.value);
+    const before = { rerolls: ctx.run.rerolls, executes: ctx.run.executes };
+    def.use(ctx);
+
+    const rerolls = REROLLS.exec(def.desc);
+    if (rerolls && ctx.run.rerolls - before.rerolls !== Number(rerolls[1])) return true;
+
+    const executes = EXECUTES.exec(def.desc);
+    if (executes && ctx.run.executes - before.executes !== Number(executes[1])) return true;
+
+    const shift = SHIFT.exec(def.desc);
+    if (shift && !ctx.dice.every((die, i) =>
+      die.value === Math.min(DICE[die.type].faces, values[i] + Number(shift[1])))) return true;
+
+    const power = POWER.exec(def.desc);
+    if (power && ctx.run.overdrive !== Number(power[1])) return true;
+
+    return false;
+  }).map(([id]) => id);
+
+  check('every ability moves the number its description promises', wrongAbilities, []);
+
+  /*
+   * The cancellation contract, at the board where it bites: everything already
+   * showing its highest face. Nothing can be raised from there, so an ability
+   * whose whole job is raising a die has to refuse rather than take the charge.
+   */
+  const maxedBoard = () => {
+    const ctx = abilityBoard();
+    for (const die of ctx.dice) die.value = DICE[die.type].faces;
+    return ctx;
+  };
+
+  check('raising abilities refuse a board that is already maxed',
+    ['bitshift', 'defrag', 'exploit', 'kexploit', 'clone', 'polymorph']
+      .filter(id => ABILITIES[id].use(maxedBoard()) !== false),
+    []);
+
   check('every ability has an icon',
     Object.keys(ABILITIES).every(id => ICON_PATTERNS[id]), true);
   check('a die that scores twice says so',
@@ -155,6 +367,76 @@ try {
     return [...seen].sort((a, b) => a - b);
   };
 
+  /*
+   * Every die's description, checked against what the die actually does.
+   *
+   * The market text is the only explanation a player ever gets, so a die whose
+   * description has drifted from its code is a lie the game tells at the point
+   * of sale. Reading the nineteen of them by eye catches that once; this
+   * catches it every run.
+   *
+   * It goes both ways on purpose. Forwards, every number the text promises has
+   * to be a number the die produces. Backwards — the half that actually bites —
+   * anything the definition does has to be something the text mentions, so a
+   * die cannot quietly acquire a behaviour nobody is told about.
+   */
+  const DASH = /Rolls (\d+)[–-](\d+)/;
+  const LIST = /Rolls (\d+), (\d+) or (\d+)/;
+  const PAIR = /Lands on (\d+) or (\d+)/;
+
+  /** What the description says this die can land on, or null when it says it lands blank. */
+  const claimedRoll = desc => {
+    if (/Rolls blank/.test(desc)) return null;
+    const span = DASH.exec(desc);
+    if (span) {
+      const [, low, high] = span.map(Number);
+      return Array.from({ length: high - low + 1 }, (_, i) => low + i);
+    }
+    const list = LIST.exec(desc);
+    if (list) return list.slice(1).map(Number);
+    const pair = PAIR.exec(desc);
+    if (pair) return pair.slice(1).map(Number);
+    return undefined; // the description makes no claim at all, which is itself a failure
+  };
+
+  /** Every value this die's own effects can ever produce, by face. */
+  const facesOf = def => Array.from({ length: def.faces }, (_, i) => i + 1);
+  const flatMults = def => facesOf(def)
+    .flatMap(value => def.onScore?.({ scoringValue: value }) || [])
+    .map(effect => effect.value);
+  const lateMults = def => facesOf(def)
+    .map(value => def.lateMultiplier?.({ scoringValue: value }))
+    .filter(Boolean);
+
+  const drifted = Object.entries(DICE).filter(([id, def]) => {
+    const desc = def.desc || '';
+    const claim = claimedRoll(desc);
+
+    // It has to say what it rolls, and be right about it.
+    if (claim === undefined) return true;
+    if (claim === null && !def.mirrors) return true;
+    if (claim && String(rolledRange(id, Math.max(600, def.faces * 40))) !== String(claim)) return true;
+
+    // Forwards: every number in the text is a number the die can produce.
+    const flat = /\+(\d+) Mult/.exec(desc);
+    if (flat && !flatMults(def).includes(Number(flat[1]))) return true;
+    const late = /×([\d.]+) Mult/.exec(desc);
+    if (late && !lateMults(def).includes(Number(late[1]))) return true;
+
+    // Backwards: everything the die does is something the text admits to.
+    if (def.onScore && !flat) return true;
+    if (def.lateMultiplier && !late) return true;
+    if (def.retriggers && !/twice/i.test(desc)) return true;
+    if (def.noBits && !/no Bits|dead/i.test(desc)) return true;
+    if (def.wearsOut && !/loses a face|spent/i.test(desc)) return true;
+    if (def.mirrors && !/blank|highest/i.test(desc)) return true;
+    if (def.roll && !(LIST.test(desc) || PAIR.test(desc) || /sticks|raise it/i.test(desc))) return true;
+
+    return false;
+  }).map(([id]) => id);
+
+  check('every die does exactly what its description says', drifted, []);
+
   check('a tossed coin lands on 1 or 6 and nothing else', rolledRange('coin'), [1, 6]);
   check('a loaded die never disappoints', rolledRange('loaded'), [4, 5, 6]);
   check('a lego brick is a d4', rolledRange('lego'), [1, 2, 3, 4]);
@@ -164,9 +446,56 @@ try {
     // A die already showing 5 cannot be rerolled down to a 2.
     return [...Array(200)].every(() => def.roll({ type: 'gum', value: 5 }, 6, gameInt) >= 5);
   })(), true);
-  check('a lego 1 is the roll that pays',
-    [DICE.lego.onScore({ scoringValue: 1 }).length, DICE.lego.onScore({ scoringValue: 4 }).length],
+  // The four is the face that lands studs up, which is the whole reason it is
+  // the one that pays; a one is the brick on its end, showing a single stud.
+  check('a lego 4 is the roll that pays',
+    [DICE.lego.onScore({ scoringValue: 4 }).length, DICE.lego.onScore({ scoringValue: 1 }).length],
     [1, 0]);
+  // Studs down it is a brick on the floor: no Mult and no Bits either. The
+  // engine reads noBits per roll, so this has to be a question, not a flag.
+  check('a lego that did not land studs up scores nothing',
+    [1, 2, 3, 4].map(value => paysBits(DICE.lego, { scoringValue: value })),
+    [false, false, false, true]);
+  // The same reader still has to handle a plain flag, and a die with no opinion.
+  check('paysBits reads a flag and an absence too',
+    [paysBits(DICE.fuzzy, { scoringValue: 6 }), paysBits(DICE.d6, { scoringValue: 6 })],
+    [false, true]);
+  // But it is never a hole in the pool: noBits stops it reaching the Bits, not
+  // the combo, so a silent brick still pairs and still fills a straight.
+  check('a silent lego still counts for the combo',
+    comboTags([4, 4, 2, 6, 6]).includes('2 PAIRS'), true);
+  /*
+   * The point of the whole rule: a brick that did not land studs up is dead all
+   * the way down, artifacts included. Without this the cheapest die on the
+   * board would still collect +4 Bits off PACKET SNIFFER for landing on its
+   * side, which is most of a working die and none of the advertised risk.
+   */
+  check('artifacts do not pay out for a brick that did not land',
+    [1, 2, 3, 4].map(value => contributes(DICE.lego, { scoringValue: value })),
+    [false, false, false, true]);
+  // And the line is "contributed anything", not "contributed Bits", which is
+  // what leaves FUZZY DICE exactly where they were: no Bits, but always a Mult.
+  check('fuzzy dice still score, they just never paid Bits',
+    [paysBits(DICE.fuzzy, { scoringValue: 3 }), contributes(DICE.fuzzy, { scoringValue: 3 })],
+    [false, true]);
+  /*
+   * A die whose payout hangs on one exact face is only safe while nothing can
+   * move it past that face. Both abilities that raise a value clamp to the
+   * die's own maximum and skip a die already sitting on it, so the worst either
+   * can do to a brick is leave it where it was: BIT SHIFT walks it towards
+   * studs up, DEFRAG puts it there outright, and neither can knock it off.
+   */
+  check('no ability can push a lego past its studs-up face', (() => {
+    const nudge = (id, value) => {
+      const die = { type: 'lego', value, locked: false };
+      ABILITIES[id].use({ dice: [die], run: {}, log() {}, notify() {}, popDie() {} });
+      return die.value;
+    };
+    return [
+      [1, 2, 3, 4].map(value => nudge('bitshift', value)),
+      [1, 2, 3, 4].map(value => nudge('defrag', value)),
+    ];
+  })(), [[2, 3, 4, 4], [4, 4, 4, 4]]);
   check('fuzzy dice are there for the Mult, not the Bits',
     [!!DICE.fuzzy.noBits, DICE.fuzzy.onScore()[0].value], [true, 6]);
 

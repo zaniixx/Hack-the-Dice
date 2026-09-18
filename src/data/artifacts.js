@@ -31,6 +31,13 @@ const BLOCKCHAIN_GROWTH = 1.15;   // per node breached after purchase
 const SINGULARITY_GROWTH = 1.6;   // per server tier past the first
 const MOORE_GROWTH = 2;           // per migration after purchase
 
+/*
+ * A note on `perDie`, which every artifact below phrases as "for every die that
+ * scores": it is only offered dice that actually put something into the tally.
+ * A die that contributed no Bits and no Mult — a LEGO BRICK that landed studs
+ * down — is not shown to these at all, so the wording is literal. FUZZY DICE
+ * pay Mult rather than Bits and still count, because they still scored.
+ */
 export const ARTIFACTS = {
   // ---- Tier 1 -------------------------------------------------------------
   overclock: {

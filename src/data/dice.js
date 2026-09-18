@@ -15,7 +15,8 @@
  *   mirrors         scores the highest value among the other dice instead
  *   retriggers      scores a second time, paying every perDie artifact twice
  *   roll(die, cap, gameInt)  what it lands on, when 1–faces is not the answer
- *   noBits          scores no Bits at all — it is here for the Mult
+ *   noBits          scores no Bits: `true` always, or a function of the die
+ *                   when whether it pays depends on what it rolled
  *   wearsOut        loses a face per node, and is gone when it runs out
  *   iconFace        the face to show in the market, for a die that cannot roll
  *                   every number up to its maximum
@@ -143,11 +144,40 @@ export const DICE = {
     name: 'LEGO BRICK',
     faces: 4, cut: 1, color: '#ff4d6d',
     cost: 4, tier: 1,
-    // The worst roll on the smallest die pays the most, which is exactly how
-    // it works on a dark landing. One roll in four, so +6 averages out near
-    // VIRUS's flat +3 — bought with the worst Bits on the board.
-    desc: 'Rolls 1–4. Adds +6 Mult when it rolls a 1.',
-    onScore: die => (die.scoringValue === 1 ? [mult(6)] : []),
+    /*
+     * A brick only hurts one way up, and only counts for anything that way up
+     * either.
+     *
+     * The four faces are four landings — on its end, on its side, tipped on an
+     * edge, and flat with the studs up — and the studs you can count are the
+     * value, so the four is the one that landed studs up. Any other way round
+     * it is just a brick on the floor: it pays no Bits and no Mult, and the
+     * face says why without being read.
+     *
+     * That makes it the one all-or-nothing die in the pool. Three rolls in four
+     * it contributes nothing at all; the fourth pays its face and +6 Mult at
+     * once. Expected Bits land near 1 against a D6's 3.5, which is what the
+     * lowest price on the board buys: not a worse die, a louder one.
+     *
+     * A brick that did not land studs up is dead all the way down: no Bits, no
+     * Mult, and no perDie artifact fires for it either. That last part is the
+     * one that matters, because without it the cheapest die on the board would
+     * still be collecting +4 Bits off PACKET SNIFFER and +2 Mult off MECHANICAL
+     * KEYBOARD for landing on its side, which is most of a working die for four
+     * credits and none of the risk the face is advertising.
+     *
+     * What it does keep is its value. `noBits` stops a die reaching the Bits,
+     * not the combo, so a silent brick still pairs and still fills a straight —
+     * enough that a pool holding one is not holding a hole three turns in four.
+     *
+     * The two abilities that raise a face are its way out, and both are worth
+     * the slot here: BIT SHIFT walks a 3 up to studs up and DEFRAG puts any
+     * brick there outright. Neither can overshoot — both clamp at the die's own
+     * maximum, which for this one is the face that pays.
+     */
+    desc: 'Rolls 1–4. Studs up on a 4: its Bits and +6 Mult. Any other face is dead.',
+    noBits: die => die.scoringValue !== 4,
+    onScore: die => (die.scoringValue === 4 ? [mult(6)] : []),
   },
   battery: {
     name: 'AA BATTERY',
