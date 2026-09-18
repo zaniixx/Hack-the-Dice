@@ -474,6 +474,30 @@ phone, anywhere, and the rules travel with it.
 site — they belong on the jam page. Remove `/press` from `.gitignore` if you
 want to link them directly.
 
+### Versions
+
+The corner of the start screen reads something like `v0.4.0+11 · a1b2c3d`, and
+that is two facts rather than one. `v0.4.0` is the release — a number a person
+chose — and `a1b2c3d` is the commit it was actually built from. `+11` is how
+many commits landed between them, which matters because every push to main
+deploys: most builds are some way past the last tag, and "v0.4.0" and "eleven
+commits after v0.4.0" are different things to get a bug report about. Hovering
+spells it out and adds the deploy date; clicking opens that exact commit.
+
+The game is pre-1.0 and will be for a while, so releases are `v0.x.y`. Cutting
+one is a tag and nothing else — no file to edit, no number to forget:
+
+```sh
+git tag v0.4.0
+git push --tags
+```
+
+The next deploy picks it up. Until the first tag exists there is no release to
+name, so the stamp shows the bare commit rather than inventing a version nobody
+chose. `build.json` is written by the workflow at deploy time; the copy in the
+repository is empty, which is what a checkout served off a laptop honestly
+knows about its own release.
+
 ### After a deploy
 
 GitHub Pages sends `Cache-Control: max-age=600`, so a browser that was on the

@@ -77,7 +77,7 @@ import {
 import { maxUiScale, uiScale, TOUCH_WIDTH } from '../src/ui/viewport.js';
 import { binds, ACTIONS, ACTION_IDS, RESERVED, keyLabel } from '../src/core/keybinds.js';
 import { ACHIEVEMENTS, ACHIEVEMENT_IDS, Moment, dueAt } from '../src/data/achievements.js';
-import { buildLabel } from '../src/services/build-info.js';
+import { buildLabel, buildDetail } from '../src/services/build-info.js';
 import { moodFor, intensityFor } from '../src/game/soundtrack.js';
 import {
   planBar, progressionOf, layersAt, frequencyOf, renderBars,
@@ -1301,12 +1301,37 @@ try {
    * is that a checkout with nothing deployed behind it says so rather than
    * inventing a version, and that a broken date is dropped rather than printed.
    */
-  check('a deployed build reads as a version and a date',
-    buildLabel({ version: 'v1.2', built: '2026-09-18T00:00:00Z' }).startsWith('v1.2 · '), true);
-  check('a checkout says what it is', buildLabel({ version: 'dev', built: '' }), 'dev');
+  /*
+   * The build stamp: a release somebody chose, and the commit it actually is.
+   *
+   * Both halves earn their place. The release is what a player says when they
+   * say which version they were playing; the commit is the only thing precise
+   * enough to check out and reproduce from. `+N` is the distance between them,
+   * and it matters because every push deploys, so most builds are some way
+   * past the last tag.
+   */
+  check('a release build is its version and its commit',
+    buildLabel({ release: 'v0.4.0', commits: 0, sha: 'a1b2c3d' }), 'v0.4.0 · a1b2c3d');
+  check('and a build past that release says how far past',
+    buildLabel({ release: 'v0.4.0', commits: 11, sha: 'a1b2c3d' }), 'v0.4.0+11 · a1b2c3d');
+  // +0 would only raise the question of what it meant.
+  check('a build that is exactly the release does not say +0',
+    buildLabel({ release: 'v0.4.0', commits: 0, sha: '' }), 'v0.4.0');
+  check('before the first tag the commit stands on its own',
+    buildLabel({ release: '', commits: 29, sha: 'ffe9391' }), 'ffe9391');
+  check('a checkout says what it is', buildLabel({}), 'dev');
+
+  // The date does not fit in the corner but is the other first question when
+  // something is wrong, so it lives in the tooltip.
+  check('the tooltip spells the same build out',
+    buildDetail({ release: 'v0.4.0', commits: 11, sha: 'a1b2c3d', built: '2026-09-18T00:00:00Z' })
+      .startsWith('11 commits after v0.4.0 · commit a1b2c3d · deployed '), true);
+  check('one commit past is not "1 commits"',
+    buildDetail({ release: 'v0.4.0', commits: 1, sha: 'a1b2c3d' }),
+    '1 commit after v0.4.0 · commit a1b2c3d');
   check('a date nobody can parse is left off, not printed as Invalid Date',
-    buildLabel({ version: 'v1.2', built: 'last tuesday' }), 'v1.2');
-  check('and no version at all shows nothing', buildLabel({ version: '', built: '' }), '');
+    buildDetail({ release: 'v0.4.0', commits: 0, sha: 'a1b2c3d', built: 'last tuesday' }),
+    'release v0.4.0 · commit a1b2c3d');
 
   // The soundtrack follows tension, not location.
   check('the menu has its own mood', moodFor({ phase: 'title' }), 'menu');

@@ -37,14 +37,28 @@ jobs:
       # What the game shows in the corner. Written here rather than committed,
       # because the only build date worth printing is the one the deploy stamped
       # on it — a number kept by hand goes stale the first time someone forgets.
+      #
+      # The release comes from the newest v-tag, which is the one part of this a
+      # person decides: `git tag v0.4.0 && git push --tags` is what cuts a
+      # release, and nothing else needs editing. Everything after that tag is
+      # counted, because every push to main deploys and most builds are some way
+      # past the last release — "v0.4.0" and "eleven commits after v0.4.0" are
+      # different things to get a bug report about.
       - name: Stamp the build
         run: |
-          VERSION="$(git describe --tags --always)"
+          RELEASE="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
+          if [ -n "$RELEASE" ]; then
+            COMMITS="$(git rev-list --count "$RELEASE"..HEAD)"
+          else
+            # Nothing tagged yet: there is no release to name, so the commit
+            # stands on its own rather than a version nobody chose being made up.
+            COMMITS="$(git rev-list --count HEAD)"
+          fi
           SHA="$(git rev-parse --short HEAD)"
           BUILT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           RUN="${{ github.run_number }}"
           cat > build.json <<JSON
-          {"version":"$VERSION","sha":"$SHA","built":"$BUILT","run":"$RUN"}
+          {"release":"$RELEASE","commits":$COMMITS,"sha":"$SHA","built":"$BUILT","run":"$RUN"}
           JSON
           cat build.json
 

@@ -29,7 +29,7 @@ import { difficultyCardsHTML } from './difficulty-view.js';
 import { boardHTML, difficultyTabsHTML, pagerHTML } from './leaderboard-view.js';
 import { archiveHTML } from './archive-view.js';
 import { contractsHTML } from './contracts-view.js';
-import { buildInfo, buildLabel } from '../services/build-info.js';
+import { buildInfo, buildLabel, buildDetail } from '../services/build-info.js';
 import { startLogo, stopLogo } from '../render/logo-view.js';
 import { mergeBoard, raceBoardHTML, captureRowPositions, animateRankChanges } from './live-board.js';
 import {
@@ -144,13 +144,17 @@ function buildStampHTML() {
   const label = buildLabel(build);
   if (!label) return '';
 
-  const href = build.sha && REPO_URL ? `${REPO_URL}` : '';
+  // Straight to the commit, not the repository. The tooltip has always claimed
+  // this went to "the commit this build was made from" and it went to the front
+  // page, which is the one link somebody chasing a bug report does not need.
+  const href = build.sha && REPO_URL ? `${REPO_URL}/commit/${build.sha}` : '';
+  const detail = buildDetail(build) || 'Which build this is';
   const inner = `<span class="build-version">${escapeText(label)}</span>`;
 
   return `<div class="build-stamp">${href
     ? `<a href="${href}" target="_blank" rel="noopener noreferrer"
-         title="The commit this build was made from">${inner}</a>`
-    : inner}</div>`;
+         title="${escapeText(detail)}">${inner}</a>`
+    : `<span title="${escapeText(detail)}">${inner}</span>`}</div>`;
 }
 
 function homeHTML() {
