@@ -142,7 +142,7 @@ function buildStampHTML() {
   const label = buildLabel(build);
   if (!label) return '';
 
-  const href = build.sha && REPO_URL ? `${REPO_URL}/commit/${build.sha}` : '';
+  const href = build.sha && REPO_URL ? `${REPO_URL}` : '';
   const inner = `<span class="build-version">${escapeText(label)}</span>`;
 
   return `<div class="build-stamp">${href
