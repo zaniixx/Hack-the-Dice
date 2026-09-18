@@ -3,6 +3,7 @@
 .vscode/
 .idea/
 /press
+/docs
 
 # Local static-server logs from the headless test runs
 *.log
@@ -10,3 +11,4 @@
 # wrangler's local state and build output, from `wrangler dev`
 worker/.wrangler/
 node_modules/
+
