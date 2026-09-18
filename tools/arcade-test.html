@@ -610,6 +610,19 @@ try {
   // which is where the contracts screen is reached from.
   session.showTitle();
   await tick();
+
+  /*
+   * And the music is playing again.
+   *
+   * A finished run maps to silence, which stops the sequencer. Getting back to
+   * the start screen used to leave it stopped — the run's phase is still OVER,
+   * and the only thing that syncs the soundtrack returns early without a run
+   * and is not called on this path regardless. The result was no music at all
+   * from the end of one run until the start of the next.
+   */
+  const music = await import('../src/audio/music.js');
+  check('the music comes back with the start screen',
+    [music.isPlaying(), music.currentMood()], [true, 'menu']);
   check('the start screen offers them', !!els.start.querySelector('[data-action="view:contracts"]'), true);
   // The build stamp rides along on every start-screen view.
   check('and says which build this is, in the corner',

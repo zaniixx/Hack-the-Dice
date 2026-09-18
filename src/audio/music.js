@@ -449,6 +449,16 @@ export function setIntensity(next) {
   targetIntensity = next === null ? null : Math.min(1, Math.max(0, next));
 }
 
+/**
+ * Whether the sequencer is running at all.
+ *
+ * Distinct from whether anything is audible: the timer runs from the moment a
+ * mood is asked for, and stays silent until the audio context exists. What it
+ * answers is the question that actually went wrong — has the music been stopped
+ * and not started again.
+ */
+export const isPlaying = () => timer !== null;
+
 /** The mood currently playing, for tests and for the menu readout. */
 export const currentMood = () => mood;
 

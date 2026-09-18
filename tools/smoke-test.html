@@ -81,7 +81,7 @@ import { buildLabel } from '../src/services/build-info.js';
 import { moodFor, intensityFor } from '../src/game/soundtrack.js';
 import {
   planBar, progressionOf, layersAt, frequencyOf, renderBars,
-  setIntensity, currentIntensity, MOOD_NAMES,
+  setIntensity, currentIntensity, setMood, isPlaying, MOOD_NAMES,
 } from '../src/audio/music.js';
 import { sfx } from '../src/audio/sfx.js';
 import { initAudio, setMuted } from '../src/audio/synth.js';
@@ -1317,6 +1317,28 @@ try {
   check('a leak still draining is danger', moodFor({ phase: 'leakwait', executes: 3 }), 'danger');
   check('the market', moodFor({ phase: 'shop', executes: 4 }), 'shop');
   check('a finished run goes quiet', moodFor({ phase: 'over' }), 'silence');
+  // Nothing running at all is the start screen, not more silence. This is the
+  // mapping the start screen leans on to get its music back after a run.
+  check('and no run at all is the menu', moodFor(null), 'menu');
+
+  /*
+   * The sequencer has to come back after being stopped.
+   *
+   * A run ending maps to 'silence', which stops it outright — correct for the
+   * moment the trace lands. The bug was everything after: the music stayed off
+   * through the whole start screen until a new run began, because the only
+   * thing that syncs the soundtrack returns early when there is no run and is
+   * not called on the way back to the title anyway.
+   */
+  check('asking for a mood after silence starts the music again', (() => {
+    setMood('node');
+    setMood('silence');
+    const stopped = isPlaying();
+    setMood('menu');
+    const restarted = isPlaying();
+    setMood('silence');
+    return [stopped, restarted];
+  })(), [false, true]);
 
   /*
    * The arrangement, checked without any audio.

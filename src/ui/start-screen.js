@@ -15,6 +15,7 @@ import { activeLinks, activeProjectLinks, REPO_URL } from '../data/links.js';
 import { COPYRIGHT } from '../data/legal.js';
 
 import { initAudio } from '../audio/synth.js';
+import { syncSoundtrack } from '../game/soundtrack.js';
 import { sfx } from '../audio/sfx.js';
 import { store } from '../services/store.js';
 import {
@@ -689,6 +690,21 @@ export async function openStartScreen({
     recentHandles: profile.recentHandles,
   };
   if (!isKnownDifficulty(draft.difficulty)) draft.difficulty = DEFAULT_DIFFICULTY;
+
+  /*
+   * Menu music, because the start screen is a place and it has its own.
+   *
+   * It has to be asked for here rather than left to the HUD. A run ending sets
+   * its phase to OVER, which maps to silence — right for the moment the trace
+   * lands, wrong for everything after it — and updateUI() is the only thing
+   * that syncs the soundtrack, returns early when there is no run, and is not
+   * called on the way back here anyway. So the music stopped when a run ended
+   * and did not come back until the next one started.
+   *
+   * Passing no run says exactly what is true: nothing is playing, this is the
+   * menu. The mapping for that already lives in game/soundtrack.js.
+   */
+  syncSoundtrack(null);
 
   root().hidden = false;
   document.body.classList.add('start-open');
