@@ -473,9 +473,12 @@
  * The files in assets/icons are a single colour, so painting them directly
  * would give four black shapes on a near-black screen. Masked, the colour comes
  * from the link and each one keeps the accent it had when these were drawn by
- * hand. Shown at exactly twice their own 32px and never anything between: at a
- * fractional scale the compositor smooths a mask, and these are pixel art with
- * single-pixel strokes that go soft the moment it does.
+ * hand.
+ *
+ * The files are 128px for a 64px box on purpose. A mask is resized by the
+ * compositor and `image-rendering` does not apply to one, so a hard edge cannot
+ * be asked for — it has to be given art that needs no resizing. See
+ * assets/icons/README.md.
  */
 .corner-mark {
   width: 64px;

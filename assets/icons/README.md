@@ -30,6 +30,22 @@ the bosses and every other icon are drawn in `src/data/icons.js` as text.
 They are used as artwork, not redrawn, but each was processed into a mask:
 transparency where there is no ink, opaque where there is.
 
+Each is then **cropped to its own ink and refitted to a common box**, because
+they do not arrive at a common size. Straight out of Icons8 the beetle filled
+81% of its 32px square and the Octocat only 62%, so side by side in the corner
+one was plainly bigger than the other. Cropping to the glyph and scaling the
+long edge to the same 104 of 128 makes them match; the fit is done with nearest
+neighbour like everything else here, so an awkward ratio gives blocks a pixel
+wider in places rather than the soft edges an interpolating filter would.
+
+The result is **128px**, and that size is
+load-bearing. A mask is scaled by the compositor, and
+`image-rendering: pixelated` does not reach it — there is no way to ask for a hard edge, so the
+only way to get one is to hand it art it does not need to resize. At 128px the
+mask is 1:1 on a 2x display and an exact 2:1 reduction on a 1x one, where every
+output pixel averages a block that is already a single colour. Shipped at their
+original 32px they were visibly soft at both.
+
 Three of the four were already a single dark colour on transparency, so that
 step only discarded the colour. `github.png` was not: it arrived as a white
 Octocat sitting on a black disc, and masking that as-is produces a filled
