@@ -36,16 +36,12 @@ export const REPO_URL = 'https://github.com/zaniixx/Hack-the-Dice';
 /**
  * Where to send someone who has found something wrong.
  *
- * A bug report is worth more than a shrug, so it gets a button of its own
- * rather than being buried behind the source link.
+ * A bug report is worth more than a shrug, so it gets a button of its own. It
+ * is the only thing here: a SOURCE button used to sit beside it and went to the
+ * same place as the GitHub mark two inches to its left, which is one button too
+ * many for a corner nobody came to look at.
  */
 export const PROJECT_LINKS = [
-  {
-    id: 'github',
-    label: 'SOURCE',
-    color: '#c9d1ff',
-    url: REPO_URL,
-  },
   {
     id: 'bug',
     label: 'REPORT A BUG',

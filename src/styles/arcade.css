@@ -448,15 +448,16 @@
   right: calc(14px + env(safe-area-inset-right, 0px));
   bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   display: flex;
-  gap: 6px;
+  gap: 8px;
   z-index: 2;
 }
 
 .corner-link {
   --tier: var(--dim);
   position: relative;
-  width: 34px;
-  height: 34px;
+  /* Big enough for the mark at 2x, with room to breathe around it. */
+  width: 72px;
+  height: 72px;
   display: grid;
   place-items: center;
   background: var(--screen-2);
@@ -466,10 +467,22 @@
   transition: opacity .12s steps(2);
 }
 
-.corner-link img {
-  width: 15px;
-  height: 15px;
-  image-rendering: pixelated;
+/*
+ * The mark itself, drawn as a mask rather than an image.
+ *
+ * The files in assets/icons are a single colour, so painting them directly
+ * would give four black shapes on a near-black screen. Masked, the colour comes
+ * from the link and each one keeps the accent it had when these were drawn by
+ * hand. Shown at exactly twice their own 32px and never anything between: at a
+ * fractional scale the compositor smooths a mask, and these are pixel art with
+ * single-pixel strokes that go soft the moment it does.
+ */
+.corner-mark {
+  width: 64px;
+  height: 64px;
+  background: var(--tier);
+  mask: var(--mark) center / contain no-repeat;
+  -webkit-mask: var(--mark) center / contain no-repeat;
 }
 
 .corner-link:hover,

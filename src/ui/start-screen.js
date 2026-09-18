@@ -13,7 +13,7 @@ import { DEFAULT_DIFFICULTY, isKnownDifficulty } from '../data/difficulty.js';
 import { MAX_SEED_LENGTH, normaliseSeed } from '../core/game-random.js';
 import { activeLinks, activeProjectLinks, REPO_URL } from '../data/links.js';
 import { COPYRIGHT } from '../data/legal.js';
-import { iconURL } from '../render/icon-sprites.js';
+
 import { initAudio } from '../audio/synth.js';
 import { sfx } from '../audio/sfx.js';
 import { store } from '../services/store.js';
@@ -102,8 +102,23 @@ const root = () => els.start;
  * though pressing them were part of starting a run. The name appears beside the
  * icon on hover, and `aria-label` carries it for anyone not hovering anything.
  *
+ * The marks are real icon files, not something drawn here: a hand-pixelled
+ * GitHub logo is a shape that merely suggests GitHub, and the whole job of this
+ * corner is being recognised without being read. They are used as CSS masks
+ * rather than images so each one still takes its link's own colour — see
+ * assets/icons/README.md for where they came from and what that asks of us.
+ *
  * These leave the game, so they open in a new tab and drop the referrer.
  */
+
+/**
+ * The mask file for a link.
+ *
+ * Resolved against this module rather than the page, so it is still found from
+ * tools/ — where the test pages mount this very markup — and from a copy of the
+ * game served out of a subdirectory.
+ */
+const markURL = id => new URL(`../../assets/icons/${id}.png`, import.meta.url).href;
 function cornerLinksHTML() {
   const links = [...activeLinks(), ...activeProjectLinks()];
   if (!links.length) return '';
@@ -111,7 +126,7 @@ function cornerLinksHTML() {
   return `<div class="corner-links">${links.map(link => `
     <a class="corner-link" href="${link.url}" target="_blank" rel="noopener noreferrer"
        style="--tier:${link.color}" data-label="${link.label}" aria-label="${link.label}">
-      <img src="${iconURL(link.id, link.color)}" alt="">
+      <i class="corner-mark" style="--mark:url('${markURL(link.id)}')"></i>
     </a>`).join('')}</div>`;
 }
 

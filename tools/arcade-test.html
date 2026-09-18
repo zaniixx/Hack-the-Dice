@@ -141,15 +141,33 @@ try {
   section('Links, and who owns this');
   const linkButtons = [...els.start.querySelectorAll('.corner-link')];
   check('the start screen offers links', linkButtons.length > 0, true);
-  check('including the author and a way to report a bug',
-    linkButtons.map(a => a.dataset.label), ['GITHUB', 'SOURCE', 'REPORT A BUG']);
+  /*
+   * Two, not three. A SOURCE button used to sit between these and went to the
+   * same repository the GitHub mark beside it goes to, so it was cut.
+   */
+  check('the author, and a way to report a bug',
+    linkButtons.map(a => a.dataset.label), ['GITHUB', 'REPORT A BUG']);
   check('the bug button opens an issue',
     linkButtons.at(-1).getAttribute('href').endsWith('/issues/new'), true);
   check('every link leaves the game safely',
     linkButtons.every(a => a.target === '_blank'
       && a.rel.includes('noopener') && a.rel.includes('noreferrer')), true);
-  check('they are icons, with no label taking up room',
-    linkButtons.every(a => a.querySelector('img') && !a.textContent.trim()), true);
+  check('they are marks, with no label taking up room',
+    linkButtons.every(a => a.querySelector('.corner-mark') && !a.textContent.trim()), true);
+  /*
+   * The marks are icon files used as masks, not shapes drawn in this codebase.
+   * Masked rather than painted is what keeps each one the colour of its own
+   * link, so a mark that has lost its mask is a mark nobody can see.
+   */
+  check('each mark is a real icon file, masked so it takes the link colour',
+    linkButtons.every(a => {
+      const style = getComputedStyle(a.querySelector('.corner-mark'));
+      const mask = style.maskImage || style.webkitMaskImage || '';
+      return mask.includes('assets/icons/') && mask.endsWith('")');
+    }), true);
+  check('and is shown at a size worth having',
+    linkButtons.every(a =>
+      parseInt(getComputedStyle(a.querySelector('.corner-mark')).width, 10) >= 48), true);
   // No visible text means the name has to reach a screen reader another way.
   check('and each still says what it is',
     linkButtons.every(a => a.getAttribute('aria-label')), true);
