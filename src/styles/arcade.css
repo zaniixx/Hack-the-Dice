@@ -211,11 +211,11 @@
   gap: 10px;
   /*
    * About half as wide as the row of buttons above it, which measures a little
-   * over 830px. Wide enough that it is obviously the thing to press, and not so
+   * under 870px. Wide enough that it is obviously the thing to press, and not so
    * wide that it reads as a banner across the bottom of the screen. Worth
-   * re-measuring if that row gains or loses a button.
+   * re-measuring if that row gains a button or one of them is renamed.
    */
-  width: min(415px, 100%);
+  width: min(435px, 100%);
   margin: 0 auto;
 }
 
@@ -289,6 +289,33 @@
   padding-top: 12px;
   border-top: 1px solid var(--screen-line);
 }
+
+/*
+ * Which build this is, in the corner opposite the author's links.
+ *
+ * Quiet enough to ignore and legible enough to read out over a chat when
+ * something has gone wrong, which is the only time anybody wants it.
+ */
+.build-stamp {
+  position: fixed;
+  left: calc(14px + env(safe-area-inset-left, 0px));
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 2;
+  font-family: var(--vt);
+  font-size: 15px;
+  line-height: 1;
+  color: var(--dim);
+  opacity: .6;
+}
+
+.build-stamp a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.build-stamp:hover { opacity: 1; }
+.build-stamp a:hover { color: var(--cyan); }
+.build-stamp a:focus-visible { outline: 1px solid var(--cyan); outline-offset: 3px; }
 
 /* ---- Paging a board longer than one screen -------------------------------- */
 
@@ -714,5 +741,12 @@
     position: static;
     align-self: flex-end;
     margin-top: 2px;
+  }
+
+  .build-stamp {
+    position: static;
+    align-self: flex-start;
+    margin-top: 2px;
+    opacity: .6;
   }
 }

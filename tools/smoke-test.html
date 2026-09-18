@@ -72,6 +72,7 @@ import {
 import { maxUiScale, uiScale, TOUCH_WIDTH } from '../src/ui/viewport.js';
 import { binds, ACTIONS, ACTION_IDS, RESERVED, keyLabel } from '../src/core/keybinds.js';
 import { ACHIEVEMENTS, ACHIEVEMENT_IDS, Moment, dueAt } from '../src/data/achievements.js';
+import { buildLabel } from '../src/services/build-info.js';
 import { moodFor } from '../src/game/soundtrack.js';
 import { sfx } from '../src/audio/sfx.js';
 import { initAudio, setMuted } from '../src/audio/synth.js';
@@ -820,6 +821,20 @@ try {
   check('full sweep is the ninth server, because eight bosses are behind it',
     [contract('fullsweep', { run: aRun({ server: 9 }) }),
       contract('fullsweep', { run: aRun({ server: 8 }) })], [true, false]);
+
+  /*
+   * The build stamp in the corner.
+   *
+   * build.json is written at deploy time, so the only thing worth checking here
+   * is that a checkout with nothing deployed behind it says so rather than
+   * inventing a version, and that a broken date is dropped rather than printed.
+   */
+  check('a deployed build reads as a version and a date',
+    buildLabel({ version: 'v1.2', built: '2026-09-18T00:00:00Z' }).startsWith('v1.2 · '), true);
+  check('a checkout says what it is', buildLabel({ version: 'dev', built: '' }), 'dev');
+  check('a date nobody can parse is left off, not printed as Invalid Date',
+    buildLabel({ version: 'v1.2', built: 'last tuesday' }), 'v1.2');
+  check('and no version at all shows nothing', buildLabel({ version: '', built: '' }), '');
 
   // The soundtrack follows tension, not location.
   check('the menu has its own mood', moodFor({ phase: 'title' }), 'menu');

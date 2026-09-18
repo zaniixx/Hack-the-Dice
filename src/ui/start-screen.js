@@ -11,7 +11,7 @@
  */
 import { DEFAULT_DIFFICULTY, isKnownDifficulty } from '../data/difficulty.js';
 import { MAX_SEED_LENGTH, normaliseSeed } from '../core/game-random.js';
-import { activeLinks, activeProjectLinks } from '../data/links.js';
+import { activeLinks, activeProjectLinks, REPO_URL } from '../data/links.js';
 import { COPYRIGHT } from '../data/legal.js';
 import { iconURL } from '../render/icon-sprites.js';
 import { initAudio } from '../audio/synth.js';
@@ -28,6 +28,7 @@ import { difficultyCardsHTML } from './difficulty-view.js';
 import { boardHTML, difficultyTabsHTML, pagerHTML } from './leaderboard-view.js';
 import { archiveHTML } from './archive-view.js';
 import { contractsHTML } from './contracts-view.js';
+import { buildInfo, buildLabel } from '../services/build-info.js';
 import { mergeBoard, raceBoardHTML, captureRowPositions, animateRankChanges } from './live-board.js';
 import {
   hostDraft, resetHostDraft, setHostDifficulty, toggleBan, captureHostForm,
@@ -36,6 +37,9 @@ import {
 import { openSettings } from './settings-panel.js';
 
 const MAX_HANDLE = 12;
+
+const escapeText = text => String(text ?? '').replace(/[&<>"]/g,
+  ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
 
 /**
  * Handles are shown on boards and written back into an input value, so they are
@@ -56,6 +60,9 @@ let ctx = { saved: null, best: null, onStart: null, onResume: null };
 let draft = { handle: '', difficulty: '', seed: '' };
 
 let view = 'home';
+/** What the corner says about this build. Filled on the first render. */
+let build = null;
+
 let boardFilter = 'all';
 /** Which page of the board is showing. Reset whenever the filter changes. */
 let boardPage = 0;
@@ -106,6 +113,27 @@ function cornerLinksHTML() {
        style="--tier:${link.color}" data-label="${link.label}" aria-label="${link.label}">
       <img src="${iconURL(link.id, link.color)}" alt="">
     </a>`).join('')}</div>`;
+}
+
+/**
+ * Which build this is, in the far corner opposite the links.
+ *
+ * Deliberately quiet and deliberately present: it is the first thing worth
+ * knowing when somebody reports a bug, and the last thing anyone should be
+ * looking at while deciding to press LOCK IN. It links to the commit it was
+ * built from, when there is one to link to.
+ */
+function buildStampHTML() {
+  const label = buildLabel(build);
+  if (!label) return '';
+
+  const href = build.sha && REPO_URL ? `${REPO_URL}/commit/${build.sha}` : '';
+  const inner = `<span class="build-version">${escapeText(label)}</span>`;
+
+  return `<div class="build-stamp">${href
+    ? `<a href="${href}" target="_blank" rel="noopener noreferrer"
+         title="The commit this build was made from">${inner}</a>`
+    : inner}</div>`;
 }
 
 function homeHTML() {
@@ -329,10 +357,13 @@ async function render() {
   captureForm();
   const token = ++renderToken;
 
+  // Cached after the first call, so this is a resolved promise from then on.
+  build = await buildInfo();
+
   const html = await VIEWS[view]();
   if (token !== renderToken) return; // superseded while we were loading
 
-  root().innerHTML = html + cornerLinksHTML();
+  root().innerHTML = html + cornerLinksHTML() + buildStampHTML();
 
   /*
    * The corner links go at the end of the content column.
@@ -344,8 +375,9 @@ async function render() {
    * than beside the column.
    */
   const inner = root().querySelector('.start-inner');
-  const links = root().querySelector('.corner-links');
-  if (inner && links) inner.appendChild(links);
+  for (const corner of root().querySelectorAll('.corner-links, .build-stamp')) {
+    if (inner) inner.appendChild(corner);
+  }
 
   root().scrollTop = 0;
 

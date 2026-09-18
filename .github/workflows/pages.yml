@@ -29,6 +29,24 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
+        with:
+          # Tags and history, so `git describe` can name the build something
+          # better than a bare commit once there is a tag to find.
+          fetch-depth: 0
+
+      # What the game shows in the corner. Written here rather than committed,
+      # because the only build date worth printing is the one the deploy stamped
+      # on it — a number kept by hand goes stale the first time someone forgets.
+      - name: Stamp the build
+        run: |
+          VERSION="$(git describe --tags --always)"
+          SHA="$(git rev-parse --short HEAD)"
+          BUILT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          RUN="${{ github.run_number }}"
+          cat > build.json <<JSON
+          {"version":"$VERSION","sha":"$SHA","built":"$BUILT","run":"$RUN"}
+          JSON
+          cat build.json
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

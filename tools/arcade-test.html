@@ -547,6 +547,9 @@ try {
   session.showTitle();
   await tick();
   check('the start screen offers them', !!els.start.querySelector('[data-action="view:contracts"]'), true);
+  // The build stamp rides along on every start-screen view.
+  check('and says which build this is, in the corner',
+    !!els.start.querySelector('.build-stamp')?.textContent.trim(), true);
 
   await click('[data-action="view:contracts"]');
   await tick();
