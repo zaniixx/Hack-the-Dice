@@ -24,7 +24,7 @@ export const FAKE_BOARD_URL = 'http://fake-board.test';
  */
 export const FAKE_ADMIN_KEY = 'fake-board-admin-key-0000';
 
-const MAX_BOARD_SIZE = 100;
+const MAX_BOARD_SIZE = 1000;
 
 /** Arcade ranking, as the Worker sorts it. */
 const compare = (a, b) =>
@@ -69,8 +69,23 @@ const cleanTournament = t => ({
   secret: str(t.secret, 64),
 });
 
-const merge = (board, entry) =>
-  [...board.filter(row => row.id !== entry.id), entry].sort(compare).slice(0, MAX_BOARD_SIZE);
+/**
+ * One row per runner per threat level, their best — as the Worker does it.
+ *
+ * Worth mirroring exactly rather than approximating: a fake board that kept
+ * every run would let a client that assumes one row per handle pass here and
+ * break against the real one.
+ */
+const merge = (board, entry) => {
+  const sameRunner = row =>
+    row.handle === entry.handle && row.difficulty === entry.difficulty;
+
+  const standing = board.find(row => sameRunner(row) && row.id !== entry.id);
+  const best = standing && compare(standing, entry) < 0 ? standing : entry;
+
+  const without = board.filter(row => row.id !== entry.id && !sameRunner(row));
+  return [...without, best].sort(compare).slice(0, MAX_BOARD_SIZE);
+};
 
 /**
  * Replace `fetch` with one that serves the board from memory.
@@ -109,6 +124,16 @@ export function installFakeBoard() {
     }
 
     if (parts[0] === 'sweep' && method === 'POST') return json({ ok: true, dropped: [] });
+
+    if (parts[0] === 'compact' && method === 'POST') {
+      const before = state.scores.length;
+      // Folded back through the same merge the Worker uses, for the same reason
+      // it does: compaction and a new result must not be able to disagree.
+      let next = [];
+      for (const row of state.scores) next = merge(next, row);
+      state.scores = next;
+      return json({ ok: true, before, after: next.length, removed: before - next.length });
+    }
 
     if (parts[0] === 'scores' && method === 'DELETE') {
       if (parts.length === 1) {
@@ -196,10 +221,11 @@ export function installFakeBoard() {
       if (method === 'GET') {
         const difficulty = url.searchParams.get('difficulty');
         const limit = num(url.searchParams.get('limit')) || MAX_BOARD_SIZE;
+        const offset = num(url.searchParams.get('offset'));
         const board = difficulty
           ? state.scores.filter(row => row.difficulty === difficulty)
           : state.scores;
-        return json(board.slice(0, limit));
+        return json(board.slice(offset, offset + limit));
       }
       if (method === 'POST') {
         const entry = cleanEntry(body);

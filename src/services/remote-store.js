@@ -111,10 +111,11 @@ export const remoteStore = {
   // ---- The leaderboard -----------------------------------------------------
 
   /** @returns {?Array} the board, or null when it cannot be reached. */
-  async listScores({ difficulty = null, limit = 100 } = {}) {
+  async listScores({ difficulty = null, limit = 100, offset = 0 } = {}) {
     const query = new URLSearchParams();
     if (difficulty) query.set('difficulty', difficulty);
     query.set('limit', String(limit));
+    if (offset) query.set('offset', String(offset));
 
     return call('/scores?' + query);
   },

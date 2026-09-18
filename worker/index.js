@@ -33,8 +33,14 @@
  * Deploying it: see worker/README.md.
  */
 
-/** Boards are trimmed to this, best first, so a key cannot grow forever. */
-const MAX_BOARD_SIZE = 100;
+/**
+ * Boards are trimmed to this, best first, so a key cannot grow forever.
+ *
+ * It can afford to be large because a board holds one row per runner per threat
+ * level rather than one per run — see merge(). It grows with how many people
+ * play, not with how much they play.
+ */
+const MAX_BOARD_SIZE = 1000;
 /** A tournament nobody has touched for this long is swept up by KV itself. */
 const TOURNAMENT_TTL_S = 60 * 60 * 24 * 90;
 /** A run in progress drops off the lobby this long after its last heartbeat. */
@@ -132,10 +138,31 @@ const cleanEntry = entry => ({
   at: num(entry.at) || Date.now(),
 });
 
-/** Add an entry to a board, replacing any earlier copy of the same run. */
+/**
+ * Add an entry to a board: one row per runner per threat level, their best.
+ *
+ * A leaderboard of every run anyone has ever finished is a leaderboard of
+ * whoever played the most. So a new result either takes a handle's place on its
+ * threat level or it does not appear at all, and the same handle on a different
+ * threat level is a different row — the tiers are different games.
+ *
+ * Worth being straight about what "a runner" means here: a handle is a label
+ * somebody typed, not an account, so two people sharing one share a row. That
+ * has been true of this board since it existed, and there is nothing on it that
+ * could tell them apart.
+ *
+ * A result that loses to the one already there changes nothing, which also
+ * means re-posting a run can never make it worse.
+ */
 function merge(board, entry) {
-  const without = board.filter(row => row.id !== entry.id);
-  return [...without, entry].sort(compareEntries).slice(0, MAX_BOARD_SIZE);
+  const sameRunner = row =>
+    row.handle === entry.handle && row.difficulty === entry.difficulty;
+
+  const standing = board.find(row => sameRunner(row) && row.id !== entry.id);
+  const best = standing && compareEntries(standing, entry) < 0 ? standing : entry;
+
+  const without = board.filter(row => row.id !== entry.id && !sameRunner(row));
+  return [...without, best].sort(compareEntries).slice(0, MAX_BOARD_SIZE);
 }
 
 // ---- Routes ----------------------------------------------------------------
@@ -143,9 +170,11 @@ function merge(board, entry) {
 async function getScores(env, url) {
   const difficulty = url.searchParams.get('difficulty');
   const limit = Math.min(MAX_BOARD_SIZE, num(url.searchParams.get('limit')) || MAX_BOARD_SIZE);
+  const offset = Math.min(MAX_BOARD_SIZE, num(url.searchParams.get('offset')));
+
   const board = await readJSON(env, KEYS.scores, []);
   const filtered = difficulty ? board.filter(row => row.difficulty === difficulty) : board;
-  return json(filtered.slice(0, limit));
+  return json(filtered.slice(offset, offset + limit));
 }
 
 async function postScore(env, request) {
@@ -331,6 +360,25 @@ async function adminTournaments(env) {
   return json(rows);
 }
 
+/**
+ * Re-apply the board's own rule to everything already on it.
+ *
+ * Deploying the one-row-per-runner rule does not tidy a board that was filled
+ * under the old one — rows only collapse when that handle next posts, and a
+ * handle that never plays again keeps its pile. This folds every existing row
+ * back through merge(), which is the point: compaction cannot disagree with
+ * what a new result would have done, because it is the same function.
+ */
+async function adminCompact(env) {
+  const board = await readJSON(env, KEYS.scores, []);
+
+  let next = [];
+  for (const row of board) next = merge(next, row);
+
+  await env.BOARDS.put(KEYS.scores, JSON.stringify(next));
+  return json({ ok: true, before: board.length, after: next.length, removed: board.length - next.length });
+}
+
 /** Drop index rows whose tournament has expired, and the boards they left behind. */
 async function adminSweep(env) {
   const index = await readJSON(env, KEYS.tournamentIndex, []);
@@ -419,6 +467,7 @@ async function adminPurgeHandle(env, handle) {
 async function adminRoute(env, parts, method) {
   if (parts[0] === 'ping' && method === 'GET') return adminPing(env);
   if (parts[0] === 'sweep' && method === 'POST') return adminSweep(env);
+  if (parts[0] === 'compact' && method === 'POST') return adminCompact(env);
 
   if (parts[0] === 'scores' && method === 'DELETE') {
     if (parts.length === 1) return adminWipeBoard(env, KEYS.scores);

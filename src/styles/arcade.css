@@ -290,6 +290,30 @@
   border-top: 1px solid var(--screen-line);
 }
 
+/* ---- Paging a board longer than one screen -------------------------------- */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.pager-at {
+  font-family: var(--px);
+  font-size: 8px;
+  color: var(--dim);
+  letter-spacing: 1px;
+  min-width: 11em;
+  text-align: center;
+}
+
+.pager .btn:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
 /* ---- Archive: what this device has met, and what it has not --------------- */
 
 .arc-section + .arc-section { margin-top: 16px; }

@@ -417,6 +417,94 @@ try {
     { id: 'smoke-1', handle: 'SMOKE', score: 1, difficulty: 'pen-tester', server: 1, node: 1 })), true);
 
   /*
+   * A board is one row per runner per threat level, holding their best.
+   *
+   * Without this a leaderboard becomes a ranking of whoever played the most,
+   * and the interesting case is the third post: a worse run arriving after a
+   * better one has to be dropped, not appended and not swapped in because it
+   * is newer.
+   */
+  const run = (id, handle, score, difficulty = 'pen-tester') =>
+    store.addScore({ id, handle, score, difficulty, server: 1, node: 1, biggest: 0 });
+  // Only the rows this section puts there: the board already has a run on it
+  // from further up, and this is a check about merging, not about that.
+  const MINE = ['MERGER', 'OTHER'];
+  const boardOf = async difficulty =>
+    (await store.listScores({ difficulty, limit: 50 }))
+      .filter(row => MINE.includes(row.handle))
+      .map(row => [row.handle, row.score]);
+
+  await run('merge-1', 'MERGER', 100);
+  await run('merge-2', 'MERGER', 500);
+  await run('merge-3', 'MERGER', 300);
+  check('three runs by one runner leave one row, the best of them',
+    await boardOf('pen-tester'), [['MERGER', 500]]);
+
+  await run('merge-4', 'MERGER', 50, 'black-hat');
+  check('the same name on another threat level is its own row',
+    await boardOf('black-hat'), [['MERGER', 50]]);
+  check('and has not disturbed the first one',
+    await boardOf('pen-tester'), [['MERGER', 500]]);
+
+  await run('merge-5', 'OTHER', 400);
+  check('someone else is a row of their own',
+    await boardOf('pen-tester'), [['MERGER', 500], ['OTHER', 400]]);
+
+  /*
+   * A board that already has duplicates heals itself.
+   *
+   * The live board was filled under the old rule, so it holds several rows per
+   * handle today. Nothing goes back and rewrites it — instead the next result a
+   * handle posts takes every row of theirs with it, which is what these rows,
+   * planted directly on the board, are checking.
+   */
+  fakeBoard.state.scores.push(
+    { id: 'old-1', handle: 'LEGACY', score: 900, difficulty: 'pen-tester', server: 4, node: 1, biggest: 0 },
+    { id: 'old-2', handle: 'LEGACY', score: 600, difficulty: 'pen-tester', server: 3, node: 1, biggest: 0 },
+    { id: 'old-3', handle: 'LEGACY', score: 200, difficulty: 'pen-tester', server: 1, node: 1, biggest: 0 },
+  );
+  check('a board written under the old rule can hold several rows for one name',
+    fakeBoard.state.scores.filter(row => row.handle === 'LEGACY').length, 3);
+
+  await run('legacy-new', 'LEGACY', 10);
+  const legacy = fakeBoard.state.scores.filter(row => row.handle === 'LEGACY');
+  check('and the next run they post collapses them to one', legacy.length, 1);
+  check('keeping the best of everything that was there', legacy[0].score, 900);
+
+  /*
+   * And the whole board can be brought into line in one go.
+   *
+   * Self-healing only reaches a handle that plays again; the maintenance call
+   * catches the rest. It folds every row back through the same merge a new
+   * result goes through, so the two can never disagree about who belongs.
+   */
+  fakeBoard.state.scores.push(
+    { id: 'stale-1', handle: 'STALE', score: 800, difficulty: 'pen-tester', server: 4, node: 1, biggest: 0 },
+    { id: 'stale-2', handle: 'STALE', score: 700, difficulty: 'pen-tester', server: 3, node: 1, biggest: 0 },
+    { id: 'stale-3', handle: 'STALE', score: 20, difficulty: 'pen-tester', server: 1, node: 1, biggest: 0 },
+  );
+  ops.setAdminKey(FAKE_ADMIN_KEY);
+  const compacted = await ops.compactBoard();
+  const stale = fakeBoard.state.scores.filter(row => row.handle === 'STALE');
+  check('collapsing the board reports what it removed', compacted.data.removed >= 2, true);
+  check('and leaves one row for a name that had three', stale.length, 1);
+  check('the best one', stale[0].score, 800);
+  check('while everyone else is still there',
+    fakeBoard.state.scores.some(row => row.handle === 'MERGER'), true);
+
+  // Paging, which is how a board longer than a screen is read.
+  for (let i = 0; i < 8; i++) await run('page-' + i, 'PAGER' + i, 300 - i);
+  const firstPage = await store.listScores({ difficulty: 'pen-tester', limit: 4, offset: 0 });
+  const thirdPage = await store.listScores({ difficulty: 'pen-tester', limit: 4, offset: 8 });
+  check('a page is as long as it was asked to be', firstPage.length, 4);
+  check('and the one after it carries on where it left off',
+    thirdPage.map(row => row.handle),
+    (await store.listScores({ difficulty: 'pen-tester', limit: 50 }))
+      .slice(8, 12).map(row => row.handle));
+  check('past the end of the board is empty, not the start of it',
+    (await store.listScores({ difficulty: 'pen-tester', limit: 4, offset: 900 })).length, 0);
+
+  /*
    * An unreachable board reads as null, never as an empty one.
    *
    * The difference is the whole point: [] means "nothing on the board yet" and

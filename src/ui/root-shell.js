@@ -626,6 +626,12 @@ function netTab() {
         ${danger('purge', 'PURGE HANDLE')}
         ${danger('wipe-scores', 'WIPE BOARD')}
       </div>
+      <div class="rs-wrap">
+        <button class="rs-btn" data-net="compact">COLLAPSE DUPLICATES</button>
+      </div>
+      <div class="rs-note">One row per runner per threat level, their best. Rows
+        banked before the board worked that way stay until that name posts
+        again; this catches them all at once.</div>
       <div class="rs-note">A handle is a label, not an account: purging one takes
         every run posted under that name, from here and from every tournament
         board, whoever played them.</div>
@@ -691,6 +697,9 @@ function onNetClick(action) {
 
     case 'sweep':
       return void netAction('sweep', () => ops.sweepExpired());
+
+    case 'compact':
+      return void netAction('collapse duplicates', () => ops.compactBoard());
 
     // Local only: whether this device lists a tournament it did not host.
     case 'know':

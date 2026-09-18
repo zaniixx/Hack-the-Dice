@@ -33,12 +33,16 @@ export function difficultyTabsHTML(active) {
  * @param {string}   options.empty      note shown when there is nothing yet
  * @param {boolean}  options.showTier   include the threat level column
  * @param {?string}  options.highlight  entry id to mark as "you"
+ * @param {number}   options.startRank  rank of the first row, for a later page
  */
-export function boardHTML(entries, { empty = 'No runs recorded yet.', showTier = true, highlight = null } = {}) {
+export function boardHTML(entries, {
+  empty = 'No runs recorded yet.', showTier = true, highlight = null, startRank = 1,
+} = {}) {
   if (!entries.length) return `<p class="empty-note">${empty}</p>`;
 
   const rows = entries.map((entry, index) => {
-    const rank = index + 1;
+    // The rank is the position on the whole board, not in this page of it.
+    const rank = startRank + index;
     const mine = entry.id === highlight ? ' mine' : '';
     return `<tr class="rank-${Math.min(rank, 4)}${mine}">
       <td class="rank">${rank}</td>
@@ -58,4 +62,29 @@ export function boardHTML(entries, { empty = 'No runs recorded yet.', showTier =
     </tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
+}
+
+/**
+ * Page controls for a board that is longer than one page.
+ *
+ * Nothing is shown at all when everything fits, because a pager under a board
+ * of four rows is a control that only tells you there is nothing to control.
+ *
+ * `known` is how many rows the board has actually handed over, which is not
+ * always how many it has: the board is read a page at a time, so a full page
+ * means there is probably another one behind it. The count is written as "page
+ * n" rather than "n of m" for that reason — claiming a total nobody has counted
+ * would be worse than not claiming one.
+ */
+export function pagerHTML({ page, perPage, known, more }) {
+  if (!page && !more && known <= perPage) return '';
+
+  const first = page * perPage + 1;
+  const last = page * perPage + known;
+
+  return `<div class="pager">
+    <button class="btn sm" data-action="board-page:${page - 1}" ${page ? '' : 'disabled'}>PREV</button>
+    <span class="pager-at">${known ? `${first}–${last}` : 'nothing here'} &middot; page ${page + 1}</span>
+    <button class="btn sm" data-action="board-page:${page + 1}" ${more ? '' : 'disabled'}>NEXT</button>
+  </div>`;
 }

@@ -91,6 +91,14 @@ export const boardPing = () => call('/ping');
 /** Every tournament out there, with its board and lobby sizes. */
 export const allTournaments = () => call('/tournaments');
 
+/**
+ * Re-apply the one-row-per-runner rule to everything already on the board.
+ *
+ * Only needed once, for rows banked before the board had that rule: after that
+ * every result cleans up after itself as it lands.
+ */
+export const compactBoard = () => call('/compact', { method: 'POST' });
+
 /** Drop index rows whose tournament has already expired out of storage. */
 export const sweepExpired = () => call('/sweep', { method: 'POST' });
 

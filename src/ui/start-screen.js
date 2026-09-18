@@ -25,7 +25,7 @@ import { els } from './dom.js';
 import { toast } from './fx.js';
 import { howToPlay } from './screens.js';
 import { difficultyCardsHTML } from './difficulty-view.js';
-import { boardHTML, difficultyTabsHTML } from './leaderboard-view.js';
+import { boardHTML, difficultyTabsHTML, pagerHTML } from './leaderboard-view.js';
 import { archiveHTML } from './archive-view.js';
 import { contractsHTML } from './contracts-view.js';
 import { mergeBoard, raceBoardHTML, captureRowPositions, animateRankChanges } from './live-board.js';
@@ -57,6 +57,12 @@ let draft = { handle: '', difficulty: '', seed: '' };
 
 let view = 'home';
 let boardFilter = 'all';
+/** Which page of the board is showing. Reset whenever the filter changes. */
+let boardPage = 0;
+
+/** Rows on a page of the leaderboard, and how many pages there can ever be. */
+const ROWS_PER_PAGE = 10;
+const MAX_BOARD_PAGES = 100;
 let openTournament = null;
 let notice = '';
 let joinError = '';
@@ -174,10 +180,26 @@ function footNote() {
 
 async function leaderboardHTML() {
   const filter = boardFilter === 'all' ? null : boardFilter;
+
+  /*
+   * One row more than the page shows.
+   *
+   * That extra row is how the pager knows whether NEXT leads anywhere, without
+   * the board having to count itself or this screen having to pull a thousand
+   * rows down to display ten of them.
+   */
+  const fetched = await topScores({
+    difficulty: filter,
+    limit: ROWS_PER_PAGE + 1,
+    offset: boardPage * ROWS_PER_PAGE,
+  });
+
   // null is the board being unreachable, which is a different thing to say
   // than "nothing on it yet".
-  const entries = await topScores({ difficulty: filter, limit: 25 });
-  const offline = entries === null;
+  const offline = fetched === null;
+  const page = fetched || [];
+  const more = page.length > ROWS_PER_PAGE && boardPage + 1 < MAX_BOARD_PAGES;
+  const entries = page.slice(0, ROWS_PER_PAGE);
 
   return `<div class="start-inner">
     <div class="panel-head">
@@ -185,14 +207,20 @@ async function leaderboardHTML() {
       <button class="btn sm" data-action="view:home">BACK</button>
     </div>
     <p class="lede">Score is nodes breached, servers owned and scrap harvested, multiplied by
-      the threat level you ran.</p>
+      the threat level you ran. One row per runner per threat level &mdash; your best.</p>
     ${difficultyTabsHTML(boardFilter)}
-    ${boardHTML(entries || [], {
+    ${boardHTML(entries, {
       empty: offline
         ? 'The shared board is unreachable. Scores are kept on it, not in this browser, so there is nothing to show until it answers.'
-        : 'Nothing on this board yet. LOCK IN and put something on it.',
+        : boardPage
+          ? 'Nothing this far down the board.'
+          : 'Nothing on this board yet. LOCK IN and put something on it.',
       showTier: boardFilter === 'all',
       highlight: lastResult && lastResult.id,
+      startRank: boardPage * ROWS_PER_PAGE + 1,
+    })}
+    ${offline ? '' : pagerHTML({
+      page: boardPage, perPage: ROWS_PER_PAGE, known: entries.length, more,
     })}
   </div>`;
 }
@@ -334,6 +362,8 @@ async function render() {
 async function show(next) {
   view = next;
   notice = '';
+  // Coming back to the board starts at the top of it, not wherever you left off.
+  if (next === 'leaderboard') boardPage = 0;
   await render();
 }
 
@@ -500,6 +530,11 @@ async function onClick(event) {
       break;
     case 'board':
       boardFilter = argument;
+      boardPage = 0; // a different board is a different first page
+      await render();
+      break;
+    case 'board-page':
+      boardPage = Math.min(MAX_BOARD_PAGES - 1, Math.max(0, Number(argument) || 0));
       await render();
       break;
     case 'host-difficulty':
