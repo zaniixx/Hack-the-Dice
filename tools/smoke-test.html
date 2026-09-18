@@ -78,7 +78,11 @@ import { maxUiScale, uiScale, TOUCH_WIDTH } from '../src/ui/viewport.js';
 import { binds, ACTIONS, ACTION_IDS, RESERVED, keyLabel } from '../src/core/keybinds.js';
 import { ACHIEVEMENTS, ACHIEVEMENT_IDS, Moment, dueAt } from '../src/data/achievements.js';
 import { buildLabel } from '../src/services/build-info.js';
-import { moodFor } from '../src/game/soundtrack.js';
+import { moodFor, intensityFor } from '../src/game/soundtrack.js';
+import {
+  planBar, progressionOf, layersAt, frequencyOf, renderBars,
+  setIntensity, currentIntensity, MOOD_NAMES,
+} from '../src/audio/music.js';
 import { sfx } from '../src/audio/sfx.js';
 import { initAudio, setMuted } from '../src/audio/synth.js';
 
@@ -1313,6 +1317,145 @@ try {
   check('a leak still draining is danger', moodFor({ phase: 'leakwait', executes: 3 }), 'danger');
   check('the market', moodFor({ phase: 'shop', executes: 4 }), 'shop');
   check('a finished run goes quiet', moodFor({ phase: 'over' }), 'silence');
+
+  /*
+   * The arrangement, checked without any audio.
+   *
+   * The complaint that caused this was that the soundtrack was repetitive and
+   * irritating, and the reason was structural: one bar per mood, looping. So
+   * what is worth pinning is the structure, not the notes — that the harmony
+   * really is eight bars long, and that a chord coming round again does not
+   * bring the same phrase back with it.
+   */
+  check('every mood is an eight-bar progression, not a bar on a loop',
+    MOOD_NAMES.map(name => progressionOf(name).length), [8, 8, 8, 8, 8]);
+
+  // Bar 8 is the same chord as bar 0 and has to be a different phrase over it,
+  // which is the whole reason the motif index is not simply bar % 8.
+  check('the same chord does not get the same melody next time round', (() => {
+    const melodyOf = bar => JSON.stringify(planBar('node', bar, 0.9)
+      .events.filter(event => event.voice === 'lead').map(event => [event.step, event.note]));
+    return [
+      planBar('node', 0, 0.9).chord === planBar('node', 8, 0.9).chord,
+      melodyOf(0) === melodyOf(8),
+    ];
+  })(), [true, false]);
+
+  /*
+   * How long before it genuinely repeats, which is what the complaint was
+   * actually about. Seven motifs against an eight-bar progression are coprime,
+   * so no bar should match any earlier bar until the two cycles line up at
+   * fifty-six — between 96 and 153 seconds depending on the mood's tempo,
+   * against roughly two before.
+   *
+   * Every mood, not just one, because this only holds while each progression
+   * uses its eight chords once. Put the same chord in a phrase twice and two
+   * bars can collide long before the cycle is up, which is exactly what the
+   * first version of these progressions did.
+   */
+  check('no bar repeats until the phrase and the melody line up at 56',
+    MOOD_NAMES.map(name => {
+      const fingerprint = bar => {
+        const plan = planBar(name, bar, 0.9);
+        return plan.chord + '|' + JSON.stringify(
+          plan.events.filter(event => event.voice === 'lead').map(e => [e.step, e.note]));
+      };
+      const seen = new Set();
+      for (let bar = 0; bar < 200; bar++) {
+        const key = fingerprint(bar);
+        if (seen.has(key)) return bar;
+        seen.add(key);
+      }
+      return 200;
+    }), [56, 56, 56, 56, 56]);
+
+  /*
+   * Every note the arrangement can reach for has to exist.
+   *
+   * A misspelt name does not throw. It arrives at the synth as undefined, that
+   * voice never sounds, and nothing anywhere reports it — a chord quietly
+   * missing its bass for the rest of the run. Walking every mood across a full
+   * cycle at full intensity is the only way to be sure all of them resolve.
+   */
+  check('every note in every chord of every mood actually exists', (() => {
+    const missing = new Set();
+    for (const name of MOOD_NAMES) {
+      for (let bar = 0; bar < 56; bar++) {
+        for (const event of planBar(name, bar, 1).events) {
+          for (const note of event.notes || (event.note ? [event.note] : [])) {
+            if (!Number.isFinite(frequencyOf(note))) missing.add(note);
+          }
+        }
+      }
+    }
+    return [...missing];
+  })(), []);
+
+  /*
+   * An offline render has to come out at the intensity it was asked for.
+   *
+   * The live sequencer eases towards a new intensity at the bar line, which is
+   * right for play and wrong for rendering: a render writes every bar at once
+   * and never crosses one, so it used to come out at whatever the previous
+   * render finished on. The tool that exists to be listened to was the one
+   * thing not telling the truth.
+   */
+  check('rendering at an intensity actually uses it', (() => {
+    setIntensity(0.95);
+    renderBars(1, 0);
+    const loud = currentIntensity();
+    setIntensity(0.2);
+    renderBars(1, 0);
+    const quiet = currentIntensity();
+    setIntensity(null);
+    return [loud, quiet];
+  })(), [0.95, 0.2]);
+
+  // And the reason it holds, stated on its own so a future progression that
+  // reuses a chord fails here rather than mysteriously ten lines further up.
+  check('no mood repeats a chord inside its own phrase',
+    MOOD_NAMES.filter(name => new Set(progressionOf(name)).size !== 8), []);
+
+  /*
+   * The dynamic half. Layers have to arrive in order as the situation tightens,
+   * and a quiet moment must genuinely be quieter rather than the same bar at a
+   * lower volume.
+   */
+  check('layers switch in as intensity rises, and in order', [
+    layersAt(0.1), layersAt(0.5), layersAt(0.95).length,
+  ], [['pad'], ['pad', 'kick', 'bass', 'hat'], 7]);
+
+  check('a calm bar really is playing less than a frantic one',
+    planBar('node', 0, 0.2).events.length < planBar('node', 0, 0.95).events.length, true);
+
+  /*
+   * And the number the run hands the arrangement. What matters is the
+   * direction: fewer executes left, more damage done and a deeper server all
+   * have to push it up, and the market has to sit below an ordinary node.
+   */
+  const node = extra => ({ phase: 'ready', executes: 4, maxExecutes: 4, server: 1, enemy: { hp: 100, max: 100 }, ...extra });
+
+  check('running out of executes tightens the music',
+    intensityFor(node({ executes: 1 })) > intensityFor(node()), true);
+  check('closing in on the firewall tightens it too',
+    intensityFor(node({ enemy: { hp: 10, max: 100 } })) > intensityFor(node()), true);
+  check('and so does being deeper in the run',
+    intensityFor(node({ server: 4 })) > intensityFor(node()), true);
+  check('the market is calmer than a node',
+    intensityFor({ phase: 'shop', executes: 4 }) < intensityFor(node()), true);
+  check('an ordinary node still gets a melody over it',
+    layersAt(intensityFor(node())).includes('melody'), true);
+  check('the worst moment in a run reaches the top of the stack',
+    layersAt(intensityFor({
+      phase: 'ready', executes: 1, maxExecutes: 5, server: 5,
+      enemy: { hp: 4, max: 100, boss: 'revenant' },
+    })).includes('doubleTime'), true);
+  check('intensity never leaves 0..1', [
+    intensityFor(null), intensityFor({ phase: 'over' }),
+    intensityFor({ phase: 'ready', executes: -3, maxExecutes: 1, server: 99, enemy: { hp: -50, max: 100 } }),
+  ].every(value => value >= 0 && value <= 1), true);
+
+
 
   /*
    * A chord thicker than the note list is long.
