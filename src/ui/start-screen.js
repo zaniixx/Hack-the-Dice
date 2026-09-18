@@ -29,6 +29,7 @@ import { boardHTML, difficultyTabsHTML, pagerHTML } from './leaderboard-view.js'
 import { archiveHTML } from './archive-view.js';
 import { contractsHTML } from './contracts-view.js';
 import { buildInfo, buildLabel } from '../services/build-info.js';
+import { startLogo, stopLogo } from '../render/logo-view.js';
 import { mergeBoard, raceBoardHTML, captureRowPositions, animateRankChanges } from './live-board.js';
 import {
   hostDraft, resetHostDraft, setHostDifficulty, toggleBan, captureHostForm,
@@ -168,7 +169,7 @@ function homeHTML() {
 
   return `<div class="start-inner">
     <header class="start-head">
-      <div class="start-logo glitch" data-text="HACK THE DICE">HACK THE DICE</div>
+      <canvas class="start-logo" aria-label="Hack the Dice" role="img"></canvas>
       <p class="start-sub">Breach corporate firewalls with a hand full of dice.</p>
     </header>
 
@@ -393,6 +394,15 @@ async function render() {
   for (const corner of root().querySelectorAll('.corner-links, .build-stamp')) {
     if (inner) inner.appendChild(corner);
   }
+
+  /*
+   * The title is a canvas that animates itself, and this markup is thrown away
+   * and rebuilt on every view change — so the animation has to be handed the
+   * new canvas each time, and stopped outright on the views that have none.
+   */
+  const logo = root().querySelector('canvas.start-logo');
+  if (logo) startLogo(logo, { motion: !reducedMotion() });
+  else stopLogo();
 
   root().scrollTop = 0;
 
@@ -685,7 +695,11 @@ export async function openStartScreen({
   await render();
 }
 
+/** True when the player has asked their system for less movement. */
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 export function closeStartScreen() {
+  stopLogo();
   stopWatchingLobby();
   root().hidden = true;
   document.body.classList.remove('start-open');

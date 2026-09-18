@@ -39,6 +39,10 @@ import { ABILITIES } from '../src/data/abilities.js';
 import { definitionOf, idsOf, ItemKind } from '../src/data/catalog.js';
 import { MAX_TIER } from '../src/data/rules.js';
 import { ICON_PATTERNS } from '../src/data/icons.js';
+import {
+  LOGO_TEXT, LOGO_GLYPHS, GLYPH_JUNK, GLYPH_WIDTH, GLYPH_HEIGHT, layoutLogo,
+} from '../src/data/logo-font.js';
+import { LOGO_PALETTES, randomPalette } from '../src/render/logo-view.js';
 import { nodeHP, serverScale, SERVER_STEP, SERVER_ACCEL } from '../src/data/enemies.js';
 import { EDITIONS, isKnownEdition, editionChance, slotsFrom } from '../src/data/editions.js';
 import { BOSSES, BOSS_ORDER, bossForServer, bossOrderFor } from '../src/data/bosses.js';
@@ -213,6 +217,58 @@ try {
     dieSprite('d6', 5, 2) === dieSprite('d6', 5, 6), true);
   check('the market never advertises a face a die cannot roll',
     DICE.coin.iconFace, 6);
+
+  /*
+   * The wordmark.
+   *
+   * It is drawn a pixel at a time, so the grid has to be exact: a glyph one row
+   * short draws a letter with its feet cut off, and a junk glyph of the wrong
+   * size tears a hole in the word every time the corruption swaps one in. Both
+   * would look like the effect rather than like a mistake, which is exactly why
+   * they are worth pinning.
+   */
+  const everyGlyph = [...Object.values(LOGO_GLYPHS), ...GLYPH_JUNK];
+  check('every letter of the title has a glyph',
+    [...LOGO_TEXT].filter(ch => ch !== ' ').every(ch => LOGO_GLYPHS[ch]), true);
+  check('and no glyph is drawn that the title never uses',
+    Object.keys(LOGO_GLYPHS).filter(ch => !LOGO_TEXT.includes(ch)), []);
+  check('every glyph is the same height',
+    everyGlyph.every(rows => rows.length === GLYPH_HEIGHT), true);
+  check('and the same width, junk included',
+    everyGlyph.every(rows => rows.every(row => row.length === GLYPH_WIDTH)), true);
+  check('glyphs are made of set and unset cells and nothing else',
+    everyGlyph.every(rows => rows.every(row => /^[#.]+$/.test(row))), true);
+
+  const laid = layoutLogo();
+  check('the layout places one cell per letter, spaces aside',
+    laid.cells.length, [...LOGO_TEXT].filter(ch => ch !== ' ').length);
+  check('laid out left to right without overlapping',
+    laid.cells.every((cell, i) => i === 0 || cell.x >= laid.cells[i - 1].x + GLYPH_WIDTH), true);
+  check('and the reported width reaches the last letter',
+    laid.width, laid.cells.at(-1).x + GLYPH_WIDTH);
+
+  /*
+   * The title takes one of its palettes at random every time it is put on
+   * screen, so what matters is that they are all usable: a palette missing a
+   * colour draws part of the wordmark as `undefined`, which canvas quietly
+   * ignores — the letters simply lose a fringe and nobody is told why.
+   */
+  const paletteNames = Object.keys(LOGO_PALETTES);
+  check('there is more than one palette to choose between', paletteNames.length > 1, true);
+  check('and every one of them is complete',
+    paletteNames.every(name => {
+      const p = LOGO_PALETTES[name];
+      return ['left', 'right', 'ink'].every(k => /^#[0-9a-f]{6}$/i.test(p[k] || ''));
+    }), true);
+  // Rolled once per attempt, not once per comparison — rolling inside the
+  // search means comparing forty palettes against forty different rolls.
+  check('a palette always comes back, and always a real one',
+    [...Array(40)].every(() => {
+      const rolled = randomPalette();
+      return paletteNames.some(name => LOGO_PALETTES[name] === rolled);
+    }), true);
+  check('and over enough rolls it is not always the same one',
+    new Set([...Array(80)].map(() => randomPalette().left)).size > 1, true);
 
   check('nodeHP first node', nodeHP(1, 1), 40);
   check('nodeHP boss', nodeHP(1, 5), Math.round(40 * Math.pow(1.55, 4) * 2.2));
