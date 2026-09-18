@@ -169,7 +169,7 @@ function homeHTML() {
   return `<div class="start-inner">
     <header class="start-head">
       <div class="start-logo glitch" data-text="HACK THE DICE">HACK THE DICE</div>
-      <p class="start-sub">Breach corporate firewalls with a pool of virtual dice.</p>
+      <p class="start-sub">Breach corporate firewalls with a hand full of dice.</p>
     </header>
 
     <div class="start-cols">
