@@ -31,15 +31,12 @@ export const SCALE_MIN = 0.7;
 export const SCALE_MAX = 1.5;
 export const SCALE_STEP = 0.05;
 
-export const THEMES = ['system', 'dark', 'light'];
-
 export const DEFAULTS = Object.freeze({
   muted: false,
   speed: 1,
   uiScale: 1,
   sfxVolume: 1,
   musicVolume: 0.8,
-  theme: 'system',
   effects: true,
   shake: true,
 });
@@ -60,7 +57,6 @@ function sanitise(stored) {
     uiScale: number(stored.uiScale, SCALE_MIN, SCALE_MAX, DEFAULTS.uiScale),
     sfxVolume: number(stored.sfxVolume, 0, 1, DEFAULTS.sfxVolume),
     musicVolume: number(stored.musicVolume, 0, 1, DEFAULTS.musicVolume),
-    theme: THEMES.includes(stored.theme) ? stored.theme : DEFAULTS.theme,
     effects: flag(stored.effects, DEFAULTS.effects),
     shake: flag(stored.shake, DEFAULTS.shake),
   };

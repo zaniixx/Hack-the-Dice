@@ -834,7 +834,7 @@ try {
   const savedSettings = { ...settings };
 
   check('defaults are the ones the panel is written against',
-    [DEFAULTS.uiScale, DEFAULTS.theme, DEFAULTS.effects, DEFAULTS.shake], [1, 'system', true, true]);
+    [DEFAULTS.uiScale, DEFAULTS.effects, DEFAULTS.shake], [1, true, true]);
 
   check('a scale past the top is brought back to it', setSetting('uiScale', 40), SCALE_MAX);
   check('and past the bottom, back up', setSetting('uiScale', 0.01), SCALE_MIN);
@@ -842,11 +842,12 @@ try {
     setSetting('uiScale', 'enormous'), DEFAULTS.uiScale);
   check('a volume cannot go negative', setSetting('sfxVolume', -3), 0);
   check('or past full', setSetting('musicVolume', 9), 1);
-  check('a theme nobody has heard of is refused',
-    setSetting('theme', 'neon'), DEFAULTS.theme);
-  check('a theme we have is kept', setSetting('theme', 'dark'), 'dark');
   check('a key that is not a setting is not invented',
     [setSetting('godMode', true), 'godMode' in settings], [undefined, false]);
+  // The case-colour option was removed. Anyone who set it still has it in their
+  // stored blob, and it must not come back to life as a setting.
+  check('a setting that was taken away stays away',
+    [setSetting('theme', 'dark'), 'theme' in settings], [undefined, false]);
 
   check('speed cycles through the speeds it offers',
     [cycleSpeed(), cycleSpeed(), cycleSpeed()], [SPEEDS[1], SPEEDS[2], SPEEDS[0]]);

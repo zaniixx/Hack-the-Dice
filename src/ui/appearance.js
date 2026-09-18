@@ -36,11 +36,6 @@ export function applySettings() {
    */
   root.style.height = scale === 1 ? '' : 'var(--app-height)';
 
-  // The case colour. tokens.css has always had the two overrides; until now
-  // nothing set the attribute that chooses between them.
-  if (settings.theme === 'system') delete root.dataset.theme;
-  else root.dataset.theme = settings.theme;
-
   // Scanlines and screen glow, which are decoration on a good screen and a
   // legibility problem on a bad one.
   root.dataset.effects = settings.effects ? 'on' : 'off';

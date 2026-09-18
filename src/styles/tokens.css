@@ -31,11 +31,16 @@
 }
 
 /*
- * Only the case tokens change between themes: the screens are always dark,
- * because a CRT that glows white would not read as a CRT.
+ * Only the case tokens change with the system's preference: the screens are
+ * always dark, because a CRT that glows white would not read as a CRT.
+ *
+ * There used to be a setting for this as well, which meant the same five lines
+ * existed twice and a `:not([data-theme="light"])` guard on this block to let
+ * the setting win. The setting is gone, so the system is the only thing that
+ * chooses and once is enough.
  */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root {
     --case: #0a0911;
     --case-2: #131020;
     --case-edge: #2b2542;
@@ -43,13 +48,4 @@
     --case-dim: #7b7598;
     color-scheme: dark;
   }
-}
-
-:root[data-theme="dark"] {
-  --case: #0a0911;
-  --case-2: #131020;
-  --case-edge: #2b2542;
-  --case-ink: #d6d0ee;
-  --case-dim: #7b7598;
-  color-scheme: dark;
 }

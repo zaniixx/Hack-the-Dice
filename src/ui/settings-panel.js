@@ -112,8 +112,6 @@ function bodyHTML() {
   return `
     <h4 class="set-sec">DISPLAY</h4>
     ${row('INTERFACE SIZE', sizeHelp(), slider('uiScale', uiScale(), scaleRange()))}
-    ${row('CASE COLOUR', 'The shell around the screens; the screens stay dark',
-    choice('theme', [['system', 'SYSTEM'], ['dark', 'DARK'], ['light', 'LIGHT']], settings.theme))}
     ${row('SCREEN EFFECTS', 'Scanlines and glow. Off is easier to read',
     toggle('effects', settings.effects))}
     ${canFullscreen()
