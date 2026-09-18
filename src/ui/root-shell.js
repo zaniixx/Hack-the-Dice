@@ -36,6 +36,9 @@ import { run, Phase } from '../game/state.js';
 import {
   ARCHIVE_SECTIONS, progressOf, revealAll, forgetAll,
 } from '../game/archive.js';
+import {
+  earnedCount, contractTotal, grantAllContracts, forgetContracts,
+} from '../game/achievements.js';
 import { beginNode, breachNode } from '../game/session.js';
 import { refreshPreview } from '../game/turn.js';
 import { store } from '../services/store.js';
@@ -496,6 +499,18 @@ function archiveTab() {
       </div>
       <div class="rs-note">Shown on the start screen under ARCHIVE. Kept on this
         device, so revealing it changes nothing about a run and never leaves here.</div>
+
+      <h4>ACHIEVEMENTS</h4>
+      <div class="rs-row">
+        <span class="rs-name">COMPLETE</span>
+        <span class="rs-tier">${earnedCount()}/${contractTotal()}</span>
+      </div>
+      <div class="rs-wrap" style="margin-top:8px">
+        <button class="rs-btn" data-contracts="all">COMPLETE ALL</button>
+        <button class="rs-btn rs-x" data-contracts="none">CLEAR ALL</button>
+      </div>
+      <div class="rs-note">A run that has been touched in here earns none of
+        them on its own, which is what these two buttons are for.</div>
     </section>
   </div>`;
 }
@@ -749,6 +764,14 @@ function onClick(event) {
     if (d.archive === 'all') revealAll();
     else forgetAll();
     log('> root: archive ' + (d.archive === 'all' ? 'revealed' : 'cleared'), 'mag');
+    render();
+    return;
+  }
+
+  if (d.contracts) {
+    if (d.contracts === 'all') grantAllContracts();
+    else forgetContracts();
+    log('> root: contracts ' + (d.contracts === 'all' ? 'completed' : 'cleared'), 'mag');
     render();
     return;
   }

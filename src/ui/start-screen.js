@@ -27,6 +27,7 @@ import { howToPlay } from './screens.js';
 import { difficultyCardsHTML } from './difficulty-view.js';
 import { boardHTML, difficultyTabsHTML } from './leaderboard-view.js';
 import { archiveHTML } from './archive-view.js';
+import { contractsHTML } from './contracts-view.js';
 import { mergeBoard, raceBoardHTML, captureRowPositions, animateRankChanges } from './live-board.js';
 import {
   hostDraft, resetHostDraft, setHostDifficulty, toggleBan, captureHostForm,
@@ -150,6 +151,7 @@ function homeHTML() {
       <button class="btn" data-action="view:leaderboard">LEADERBOARD</button>
       <button class="btn" data-action="view:tournaments">TOURNAMENTS</button>
       <button class="btn" data-action="view:archive">ARCHIVE</button>
+      <button class="btn" data-action="view:contracts">ACHIEVEMENTS</button>
       <button class="btn sm" data-action="view:how">HOW TO HACK</button>
       <button class="btn sm" data-action="settings">SETTINGS</button>
     </div>
@@ -277,6 +279,7 @@ const VIEWS = {
   host: async () => `<div class="start-inner">${hostFormHTML()}</div>`,
   join: async () => `<div class="start-inner">${joinFormHTML(joinError)}</div>`,
   archive: async () => archiveHTML(),
+  contracts: async () => contractsHTML(),
   how: async () => howHTML(),
 };
 

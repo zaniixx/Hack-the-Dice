@@ -211,10 +211,11 @@
   gap: 10px;
   /*
    * About half as wide as the row of buttons above it, which measures a little
-   * under 700px. Wide enough that it is obviously the thing to press, and not
-   * so wide that it reads as a banner across the bottom of the screen.
+   * over 830px. Wide enough that it is obviously the thing to press, and not so
+   * wide that it reads as a banner across the bottom of the screen. Worth
+   * re-measuring if that row gains or loses a button.
    */
-  width: min(340px, 100%);
+  width: min(415px, 100%);
   margin: 0 auto;
 }
 
@@ -350,7 +351,9 @@
   background: transparent;
 }
 
-.arc-card.locked .arc-mark {
+/* Stands in for the sprite, on a card that has none: a locked slot's question
+   mark, and a contract's tick. */
+.arc-mark {
   width: 26px;
   height: 26px;
   flex: none;
@@ -359,13 +362,27 @@
   font-family: var(--px);
   font-size: 13px;
   color: var(--dim);
-  border: 1px dashed var(--screen-line);
+  border: 1px solid var(--screen-line);
 }
+.arc-card.locked .arc-mark { border-style: dashed; }
 
 /* Legible, but plainly not one of the ones you have: the label reads, the
    description under it recedes. */
 .arc-card.locked .arc-text b { color: var(--dim); }
 .arc-card.locked .arc-text small { color: var(--screen-line); }
+
+/*
+ * A contract. An open one is legible and quiet; a completed one is marked in
+ * lime, because this screen is worth coming back to and what you want to see on
+ * it is what you have already done.
+ */
+.arc-card.contract.done { border-color: var(--lime); }
+.arc-card.contract.done .arc-mark {
+  color: var(--screen);
+  background: var(--lime);
+  border-color: var(--lime);
+}
+.arc-card.contract.done .arc-text i { color: var(--lime); }
 
 /* ---- The author's links -------------------------------------------------- */
 

@@ -37,6 +37,7 @@ import { maybeStartTutorial, startTutorial } from '../ui/tutorial.js';
 import { showBossCutscene } from '../ui/cutscene.js';
 import { run, Phase, createRun, hasArtifact, isBusy } from './state.js';
 import { saveRun, loadSavedRun, clearSavedRun, loadBest, recordBest } from './save.js';
+import { checkContracts, Moment } from './achievements.js';
 import { openShop, generateShop } from './shop.js';
 import { resetLeak, stopLeak } from './memory-leak.js';
 import { startLiveRun, publish as publishLiveRun, stopLiveRun } from './live-run.js';
@@ -180,6 +181,10 @@ export async function breachNode() {
   updateUI();
   bump(els.scrap);
 
+  // Everything this node was worth is in now, so a contract about what the rig
+  // is carrying sees the state the player actually leaves the node with.
+  checkContracts(Moment.BREACH, { wasBoss, enemy: run.enemy });
+
   if (wasBoss) {
     await sleep(400);
     migrateServer();
@@ -199,6 +204,8 @@ function migrateServer() {
   run.node = 1;
   advanceStacks('migration');
   recordBest();
+  // run.server is already the new one, so "reach server 10" reads as it sounds.
+  checkContracts(Moment.SERVER);
   sfx.boot();
 
   // The new server opens in its market, so the player can spend before diving in.
@@ -227,6 +234,7 @@ export async function traced() {
   log('> trace complete: connection severed', 'red');
 
   const isBest = recordBest();
+  checkContracts(Moment.RUN, { reason: 'traced' });
   clearSavedRun();
   const partingShot = corpLine('traced', run.server);
   corpSays('traced');
@@ -275,6 +283,9 @@ function showRunOver({ entry, rank, tournamentRank, isBest = false, partingShot 
  */
 export async function abandonRun() {
   const worthBanking = run && (run.stats.nodes > 0 || run.stats.dmg > 0);
+  // Before the run is cleared away: walking off a good run is a choice, and
+  // one of the contracts is about making it.
+  checkContracts(Moment.RUN, { reason: 'abandoned' });
   if (worthBanking) await bankRun('abandoned');
 
   clearSavedRun();

@@ -73,6 +73,11 @@ const { installFakeBoard, FAKE_BOARD_URL } = await import('./fake-board.js');
 const fakeBoard = installFakeBoard();
 localStorage.setItem('htd_api_base', FAKE_BOARD_URL);
 
+// Contracts start unearned, or a suite run on the machine that has been playing
+// the game would pass by having earned them months ago. restoreStorage() above
+// puts the real ones back when this finishes.
+localStorage.removeItem('htd_contracts_v1');
+
 // Boot the real page: its markup, its stylesheets, its entry point.
 const { mountRealPage } = await import('./boot-page.js');
 const mounted = await mountRealPage();
@@ -86,6 +91,7 @@ const state = await import('../src/game/state.js');
 const { startNewRun, beginNode, resumeRun } = await import('../src/game/session.js');
 const { rollDice, rerollDice, onDiceSettled, refreshPreview, useAbility } = await import('../src/game/turn.js');
 const { executePayload } = await import('../src/game/execute.js');
+const contracts = await import('../src/game/achievements.js');
 const { buyItem, sellItem, refreshShop, generateShop, reorderArtifacts } = await import('../src/game/shop.js');
 const { isDraggingArtifacts, justDragged } = await import('../src/ui/artifact-drag.js');
 const { loadSavedRun, saveRun } = await import('../src/game/save.js');
@@ -162,6 +168,17 @@ try {
   check('and is offered while the market is open', els.nextNodeButton.hidden, false);
   check('node advanced', state.run.node, 2);
   check('breach was counted', state.run.stats.nodes, 1);
+  /*
+   * And the contract for it is done.
+   *
+   * Checked here rather than against the predicate — data/achievements.js is
+   * tested on its own in the smoke suite — because what can actually break is
+   * the wiring: a moment hooked in the wrong place, or hooked and never called.
+   */
+  check('breaching a node completes the contract for it',
+    contracts.isEarned('firstblood'), true);
+  check('and not one for something that has not happened',
+    contracts.isEarned('deeprun'), false);
   check('scrap harvested', state.run.scrap > scrapBefore, true);
   check('market has offers', state.run.shop.length, 4);
   check('run was saved', !!loadSavedRun(), true);

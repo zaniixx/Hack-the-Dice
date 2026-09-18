@@ -4,6 +4,7 @@
  * without touching game code.
  */
 import { rand } from '../core/random.js';
+import { clamp } from '../core/math.js';
 import { tone, noise, throttled } from './synth.js';
 
 export const sfx = {
@@ -43,10 +44,18 @@ export const sfx = {
     tone(isTimes ? 660 : 520, 0.1, 'triangle', 0.13, isTimes ? 500 : 220);
   },
 
-  /** Payoff chord, thicker the closer the hit came to killing the firewall. */
+  /**
+   * Payoff chord, thicker the closer the hit came to killing the firewall.
+   *
+   * Levels run 0 to 3, which is as many notes as there are. Asking for a
+   * thicker one used to walk off the end of the list and hand Web Audio an
+   * undefined frequency, which throws from inside the call and takes whatever
+   * was playing the sound down with it — so the level is clamped here rather
+   * than trusted from the caller.
+   */
   chord(level) {
     const notes = [220, 261.63, 329.63, 392, 493.88, 587.33];
-    const count = 3 + level;
+    const count = clamp(3 + Math.round(level || 0), 1, notes.length);
     for (let i = 0; i < count; i++) {
       tone(notes[i], 0.45 + level * 0.18, 'sawtooth', 0.045, 0, i * 0.045);
       tone(notes[i] / 2, 0.55 + level * 0.15, 'triangle', 0.06, 0, i * 0.045);

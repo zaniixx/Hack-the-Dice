@@ -526,6 +526,43 @@ try {
   check('it names the runner', /MOUSE/.test(modal.textContent), true);
   check('the run reached the board', (await store.listScores({ difficulty: 'pen-tester' })).length, 1);
 
+  /*
+   * The contracts screen keeps its own counsel.
+   *
+   * One you have not run shows as a blank, the same as a die you have never
+   * been offered — so the thing worth pinning is the negative: an unearned
+   * contract's name and its wording must not be anywhere in the markup. It
+   * would be easy to "fix" this screen into a to-do list by accident.
+   */
+  section('Contracts keep their own counsel');
+  const { ACHIEVEMENTS: ACHIEVEMENTS } = await import('../src/data/achievements.js');
+  const contracts = await import('../src/game/achievements.js');
+
+  // One run, so there is a filled card and a blank one to tell apart.
+  contracts.forgetContracts();
+  contracts.checkContracts('breach', { wasBoss: false });
+
+  // The run-over screen is still up from the section above: back to the title,
+  // which is where the contracts screen is reached from.
+  session.showTitle();
+  await tick();
+  check('the start screen offers them', !!els.start.querySelector('[data-action="view:contracts"]'), true);
+
+  await click('[data-action="view:contracts"]');
+  await tick();
+  const screen = els.start.textContent;
+  check('the one that has been run is named', screen.includes(ACHIEVEMENTS.firstblood.name), true);
+  check('and dated', /\d{4}/.test(screen), true);
+  check('one that has not is a blank, not a hint',
+    [screen.includes(ACHIEVEMENTS.deeprun.name), screen.includes(ACHIEVEMENTS.deeprun.desc)],
+    [false, false]);
+  check('and it says so', screen.includes('Not run yet'), true);
+  // Not a hardcoded 1: a run that ended on its last execute has honestly
+  // completed LAST GASP as well, and the screen should say so.
+  check('the count is of what has been run',
+    screen.includes(`${contracts.earnedCount()} of ${Object.keys(ACHIEVEMENTS).length} complete`),
+    true);
+
   say(failures ? `${failures} FAILURE(S)` : 'ALL CHECKS PASSED',
     (failures ? 'fail' : 'pass') + ' total');
 } catch (error) {

@@ -71,8 +71,10 @@ import {
 } from '../src/core/settings.js';
 import { maxUiScale, uiScale, TOUCH_WIDTH } from '../src/ui/viewport.js';
 import { binds, ACTIONS, ACTION_IDS, RESERVED, keyLabel } from '../src/core/keybinds.js';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS, Moment, dueAt } from '../src/data/achievements.js';
 import { moodFor } from '../src/game/soundtrack.js';
 import { sfx } from '../src/audio/sfx.js';
+import { initAudio, setMuted } from '../src/audio/synth.js';
 
 import { installFakeBoard, FAKE_BOARD_URL, FAKE_ADMIN_KEY } from './fake-board.js';
 
@@ -665,6 +667,72 @@ try {
     ['KeyR', 'Space', 'Digit1', 'Numpad5', 'Comma'].map(keyLabel),
     ['R', 'SPACE', '1', 'NUM 5', ',']);
 
+  /*
+   * Contracts.
+   *
+   * The catalog is deliberately nothing but data and pure predicates, so the
+   * whole of it can be checked here with made-up contexts and no run in sight.
+   * What is worth pinning is that each one fires on the thing it claims to and
+   * not on the thing next to it — a contract for beating a boss in one Execute
+   * that also fires on an ordinary node is worse than no contract.
+   */
+  const contract = (id, context) => ACHIEVEMENTS[id].test(context);
+  const aRun = (extra = {}) => ({
+    server: 1, node: 1, scrap: 0, executes: 3, difficulty: 'pen-tester',
+    dice: ['d6', 'd6', 'd6'], artifacts: [], abilities: [], editions: {},
+    stats: { dmg: 0, nodes: 0, biggest: 0, scrap: 0 }, ...extra,
+  });
+
+  check('every contract says when to look at it',
+    ACHIEVEMENT_IDS.every(id => Object.values(Moment).includes(ACHIEVEMENTS[id].at)), true);
+  check('and what it wants, in a sentence',
+    ACHIEVEMENT_IDS.every(id => ACHIEVEMENTS[id].name && ACHIEVEMENTS[id].desc), true);
+  check('every moment has something due at it',
+    Object.values(Moment).every(moment => dueAt(moment).length > 0), true);
+
+  check('a million in one hit', [1e6, 999999].map(total => contract('seven', { total })),
+    [true, false]);
+  check('overkill wants ten times the firewall, not ten times the damage',
+    [contract('overkill', { total: 400, enemy: { max: 40 } }),
+      contract('overkill', { total: 399, enemy: { max: 40 } })], [true, false]);
+
+  // The one that is easiest to get wrong: all three conditions, not any of them.
+  const boss = { boss: 'watchdog', max: 100 };
+  check('one and done needs a boss, killed, on the first execute',
+    [contract('oneshot', { killed: true, firstExecute: true, enemy: boss }),
+      contract('oneshot', { killed: true, firstExecute: false, enemy: boss }),
+      contract('oneshot', { killed: false, firstExecute: true, enemy: boss }),
+      contract('oneshot', { killed: true, firstExecute: true, enemy: { max: 40 } })],
+    [true, false, false, false]);
+
+  check('no notes means every reroll still unspent',
+    [contract('nonotes', { rerollsLeft: 2, rerollsAllowed: 2 }),
+      contract('nonotes', { rerollsLeft: 1, rerollsAllowed: 2 }),
+      // A tier with no rerolls to spend cannot earn it by having spent none.
+      contract('nonotes', { rerollsLeft: 0, rerollsAllowed: 0 })],
+    [true, false, false]);
+
+  check('bare metal is about artifacts, not about the server',
+    [contract('baremetal', { run: aRun({ server: 2 }) }),
+      contract('baremetal', { run: aRun({ server: 2, artifacts: ['quantum'] }) })],
+    [true, false]);
+  check('full set wants one of each edition',
+    [contract('fullset', { run: aRun({ editions: { a: 'encrypted', b: 'overclocked', c: 'prismatic', d: 'negative' } }) }),
+      contract('fullset', { run: aRun({ editions: { a: 'encrypted', b: 'encrypted', c: 'prismatic', d: 'negative' } }) })],
+    [true, false]);
+  check('every slot counts the slots you have, not a fixed five',
+    [contract('fullrig', { run: aRun({ artifacts: [1, 2, 3, 4, 5, 6] }), slots: 6 }),
+      contract('fullrig', { run: aRun({ artifacts: [1, 2, 3, 4, 5] }), slots: 6 })],
+    [true, false]);
+  check('cashed out is for walking away, not for being traced',
+    [contract('cashedout', { run: aRun({ stats: { nodes: 10 } }), reason: 'abandoned' }),
+      contract('cashedout', { run: aRun({ stats: { nodes: 10 } }), reason: 'traced' }),
+      contract('cashedout', { run: aRun({ stats: { nodes: 9 } }), reason: 'abandoned' })],
+    [true, false, false]);
+  check('full sweep is the ninth server, because eight bosses are behind it',
+    [contract('fullsweep', { run: aRun({ server: 9 }) }),
+      contract('fullsweep', { run: aRun({ server: 8 }) })], [true, false]);
+
   // The soundtrack follows tension, not location.
   check('the menu has its own mood', moodFor({ phase: 'title' }), 'menu');
   check('an ordinary node', moodFor({ phase: 'ready', executes: 4, maxExecutes: 4, enemy: {} }), 'node');
@@ -674,6 +742,35 @@ try {
   check('a leak still draining is danger', moodFor({ phase: 'leakwait', executes: 3 }), 'danger');
   check('the market', moodFor({ phase: 'shop', executes: 4 }), 'shop');
   check('a finished run goes quiet', moodFor({ phase: 'over' }), 'silence');
+
+  /*
+   * A chord thicker than the note list is long.
+   *
+   * chord(level) plays 3 + level notes from six, so a caller asking for more
+   * walked off the end and handed Web Audio an undefined frequency. It throws
+   * from inside the scheduling call and takes down whatever was playing the
+   * sound — the first time it happened it cost a whole breach mid-execute.
+   *
+   * It is catchable here because it throws when the note is scheduled, not when
+   * anything is rendered: an offline context that is never played is enough.
+   * tools/audio-test.html would be the natural home, but that suite needs a
+   * real browser and nothing runs it on the way past.
+   */
+  const wasMuted = settings.muted;
+  setSetting('muted', false);
+  initAudio(new OfflineAudioContext(1, 4410, 44100));
+  setMuted(false);
+
+  let chordThrew = null;
+  try {
+    sfx.chord(99);
+  } catch (error) {
+    chordThrew = String(error.message || error);
+  }
+  check('a chord thicker than the notes it has does not throw', chordThrew, null);
+
+  setSetting('muted', wasMuted);
+  setMuted(true);
 
   check('every boss has a sound',
     ['bossOnline', 'quarantine', 'cipher', 'absorb', 'throttle', 'regen', 'extort', 'contain', 'restore']

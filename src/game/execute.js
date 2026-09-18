@@ -37,6 +37,7 @@ import { shakeApp } from '../ui/fx.js';
 import { updateUI, updateFirewall, resetScoreboard } from '../ui/hud.js';
 import { executeView, Source } from '../ui/execute-view.js';
 import { run, Phase, hasArtifact } from './state.js';
+import { checkContracts, Moment } from './achievements.js';
 import { applyScoringValues, isAbsorbed, allowedDice } from './scoring.js';
 import { startLeak, isLeakDraining } from './memory-leak.js';
 import { breachNode, traced } from './session.js';
@@ -285,6 +286,16 @@ async function resolveExecute() {
     executeView.announceEnemy('RESTORED', 'c-red');
   }
   updateFirewall();
+
+  // Before firstExecute is cleared and the execute is spent: a contract that
+  // asks whether a boss died to one hit has to be asked while that is still
+  // answerable.
+  checkContracts(Moment.EXECUTE, {
+    total,
+    enemy,
+    firstExecute: run.firstExecute,
+    killed: enemy.hp <= 0,
+  });
 
   run.firstExecute = false;
   run.overdrive = 1;
